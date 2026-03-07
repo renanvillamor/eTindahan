@@ -1,0 +1,233 @@
+import { CARD_COLORS } from "@/constants/Constants";
+import { useAppTheme } from "@/hooks/useAppTheme";
+import { useSnackbar } from "@/lib/SnackbarContext";
+import { Uom } from "@/models/Uom";
+import { useDeleteUom } from "@/services/useDeleteUom";
+import { useSaveUom } from "@/services/useSaveUom";
+import { router, Stack } from "expo-router";
+import { useMemo, useState } from "react";
+import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FAB, IconButton, Searchbar } from "react-native-paper";
+import { useStore } from "../../../../store/useStore";
+import ConfirmDialog from "../../shared/ConfirmDialog";
+import UomDetailsBottomSheet from "./UomDetailsBottomSheet";
+
+export default function UomScreen() {
+  const { colors } = useAppTheme();
+  const styles = useStyles(colors);
+  const { showSnackbar } = useSnackbar();
+
+  const uoms = useStore((s) => s.uoms) ?? [];
+  const updateUom = useStore((s) => s.updateUom);
+  const removeUom = useStore((s) => s.removeUom);
+
+  const [editingItem, setEditingItem] = useState<Uom | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [isAddMode, setIsAddMode] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const saveMutation = useSaveUom();
+  const deleteMutation = useDeleteUom();
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const source = q
+      ? uoms.filter((u) => (u.displayLabel ?? u.name).toLowerCase().includes(q))
+      : uoms;
+    return [...source].sort((a, b) =>
+      (a.displayLabel ?? a.name).localeCompare(b.displayLabel ?? b.name),
+    );
+  }, [uoms, query]);
+
+  const handleAdd = () => {
+    setIsAddMode(true);
+    setEditingItem({ id: 0, name: "" });
+  };
+
+  const handleEdit = (item: Uom) => {
+    setIsAddMode(false);
+    setEditingItem(item);
+  };
+
+  const handleDismiss = () => {
+    setEditingItem(null);
+    setIsAddMode(false);
+  };
+
+  const handleSave = (
+    name: string,
+    description: string,
+    displayLabel: string,
+    packSize: number | null,
+  ) => {
+    const payload: Uom = {
+      id: editingItem?.id ?? 0,
+      name: name,
+      description: description || null,
+      displayLabel: displayLabel || null,
+      packSize: packSize ?? null,
+    };
+    saveMutation.mutate(payload, {
+      onSuccess: (saved) => {
+        updateUom(saved);
+        showSnackbar(
+          isAddMode ? "UOM added successfully." : "UOM updated successfully.",
+          "success",
+        );
+        setEditingItem(null);
+        setIsAddMode(false);
+      },
+      onError: (error) => {
+        showSnackbar(error.message, "error");
+      },
+    });
+  };
+
+  const confirmDelete = () => {
+    if (deletingId === null) return;
+    deleteMutation.mutate(deletingId, {
+      onSuccess: () => {
+        removeUom(deletingId);
+        setDeletingId(null);
+        showSnackbar("UOM deleted successfully.", "success");
+      },
+      onError: (error) => {
+        showSnackbar(error.message, "error");
+        setDeletingId(null);
+      },
+    });
+  };
+
+  return (
+    <>
+      <Stack.Screen
+        options={{
+          title: "Units of Measure",
+          headerTitleAlign: "center",
+          animation: "slide_from_right",
+          headerLeft: () => (
+            <View className="w-12 h-12 items-center justify-center -ml-2">
+              <IconButton
+                icon="arrow-left"
+                size={24}
+                onPress={() => router.back()}
+                accessibilityLabel="Back"
+                className="m-0"
+              />
+            </View>
+          ),
+        }}
+      />
+
+      <View className="flex-1 bg-gray-50">
+        <View className="px-4 pt-4 pb-2">
+          <Searchbar
+            placeholder="Search units of measure"
+            value={query}
+            onChangeText={setQuery}
+            style={styles.searchbar}
+          />
+        </View>
+
+        {filtered.length > 0 ? (
+          <FlatList
+            data={filtered}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item, index }) => {
+              const initials = item.name.substring(0, 2).toUpperCase();
+              const avatarBg = CARD_COLORS[index % CARD_COLORS.length];
+              return (
+                <View style={styles.card}>
+                  <View className="flex-row items-center px-4 py-3">
+                    <View
+                      className="w-10 h-10 rounded-full items-center justify-center mr-3"
+                      style={{ backgroundColor: avatarBg }}
+                    >
+                      <Text className="text-white font-bold text-sm">
+                        {initials}
+                      </Text>
+                    </View>
+                    <Text className="flex-1 text-gray-800 font-semibold text-base">
+                      {item.name}
+                    </Text>
+                    <IconButton
+                      icon="pencil-outline"
+                      size={20}
+                      onPress={() => handleEdit(item)}
+                      style={styles.iconButton}
+                    />
+                    <IconButton
+                      icon="trash-can-outline"
+                      size={20}
+                      onPress={() => setDeletingId(item.id)}
+                      style={styles.iconButton}
+                    />
+                  </View>
+                </View>
+              );
+            }}
+          />
+        ) : (
+          <View className="flex-1 justify-center items-center">
+            <Text className="text-gray-400 text-base">No units of measure</Text>
+          </View>
+        )}
+
+        <FAB icon="plus" onPress={handleAdd} style={styles.fab} color="white" />
+      </View>
+
+      <UomDetailsBottomSheet
+        open={editingItem !== null}
+        item={editingItem}
+        isAddMode={isAddMode}
+        isLoading={saveMutation.isPending}
+        onSave={handleSave}
+        onDismiss={handleDismiss}
+      />
+
+      <ConfirmDialog
+        visible={deletingId !== null}
+        title="Delete Unit of Measure"
+        message="Are you sure you want to delete this unit of measure?"
+        confirmLabel="Delete"
+        isLoading={deleteMutation.isPending}
+        onConfirm={confirmDelete}
+        onDismiss={() => setDeletingId(null)}
+      />
+    </>
+  );
+}
+
+const useStyles = (colors: any) =>
+  StyleSheet.create({
+    searchbar: {
+      borderRadius: 12,
+      elevation: 0,
+      backgroundColor: colors.secondary,
+    },
+    listContent: {
+      paddingHorizontal: 16,
+      paddingBottom: 96,
+    },
+    card: {
+      backgroundColor: "white",
+      borderRadius: 16,
+      marginBottom: 8,
+      elevation: 1,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.06,
+      shadowRadius: 2,
+    },
+    iconButton: {
+      margin: 0,
+    },
+    fab: {
+      position: "absolute",
+      right: 16,
+      bottom: 32,
+      backgroundColor: "#53B175",
+      borderRadius: 28,
+    },
+  });

@@ -22,7 +22,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.amawachoya.eTindahan"
     },
     "web": {
       "bundler": "metro",
@@ -34,6 +35,14 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "EXPO_PUBLIC_SUPABASE_URL": "https://cvezzvtfsbazesfmykio.supabase.co",
+      "EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_j5DrFVEXExrn1vO-fKCsHg_Ktfb-sRn",
+      "router": {},
+      "eas": {
+        "projectId": "dc98ca33-d5c7-493e-9698-7b1d12043cb5"
+      }
     }
   }
 }

@@ -1,0 +1,13 @@
+export type Delivery = {
+  id: number;
+  transactionDate: string | null;
+  supplierId: number | null;
+  supplierName: string | null;
+  itemId: number | null;
+  itemName: string | null;
+  quantity: number;
+  unitId: number | null;
+  unitName: string | null;
+  price: number;
+  total: number;
+};
