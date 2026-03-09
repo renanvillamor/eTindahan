@@ -47,7 +47,7 @@ export default function PayablesScreen() {
         id: d.id,
         itemName: d.itemName ?? "",
         quantity: Number(d.quantity ?? 0),
-        unitName: d.unitName ?? "",
+        unitName: d.uom ?? "",
         price: Number(d.price ?? 0),
         total: Number(d.total ?? 0),
       });

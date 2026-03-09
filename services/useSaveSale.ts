@@ -14,6 +14,7 @@ async function saveSales(sales: SaleToday[]): Promise<void> {
   const { error } = await supabase.from("sale").insert(
     sales.map((s) => ({
       item_id: s.itemId,
+      transaction_date: s.transactionDate,
       quantity: s.quantity,
       price: s.price,
       total: s.total,

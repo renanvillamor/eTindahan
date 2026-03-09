@@ -94,7 +94,7 @@ export default function CheckoutBottomSheet({
               titleNumberOfLines={1}
               description={() => (
                 <RNText className="text-sm text-gray-500">
-                  {formatCurrency(item.retailPrice)} × {qty} {item.saleUom}/s
+                  {formatCurrency(item.retailPrice)} × {qty} {item.singleUom}/s
                 </RNText>
               )}
               descriptionNumberOfLines={1}

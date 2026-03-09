@@ -6,8 +6,8 @@ export type Delivery = {
   itemId: number | null;
   itemName: string | null;
   quantity: number;
-  unitId: number | null;
-  unitName: string | null;
+  uomId: number | null;
+  uom: string | null;
   price: number;
   total: number;
 };

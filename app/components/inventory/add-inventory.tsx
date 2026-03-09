@@ -88,7 +88,7 @@ export default function AddInventoryScreen() {
       item_id: item.id,
       qty_on_hand: onHandByItemId[item.id] ?? 0,
       actual_qty: qtyByItemId[item.id],
-      unit_id: item.packUomId,
+      uom_id: item.packUomId,
     }));
 
     saveInventoryMutation.mutate(

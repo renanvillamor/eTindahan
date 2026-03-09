@@ -5,7 +5,7 @@ type InventoryEntry = {
   item_id: number;
   qty_on_hand: number;
   actual_qty: number;
-  unit_id: number;
+  uom_id: number;
 };
 
 type SaveInventoryParams = {
@@ -32,7 +32,7 @@ async function saveInventory(params: SaveInventoryParams): Promise<void> {
       item_id: entry.item_id,
       qty_on_hand: entry.qty_on_hand,
       actual_qty: entry.actual_qty,
-      unit_id: entry.unit_id,
+      uom_id: entry.uom_id,
       user_id: user.id,
     })),
   );

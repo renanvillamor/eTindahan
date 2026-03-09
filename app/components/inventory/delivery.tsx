@@ -68,7 +68,7 @@ export default function DeliveryScreen() {
               id: d.id,
               itemName: d.itemName ?? "",
               quantity: Number(d.quantity ?? 0),
-              unitName: d.unitName ?? "",
+              unitName: d.uom ?? "",
               price: Number(d.price ?? 0),
               total: Number(d.total ?? 0),
             })),
@@ -103,7 +103,7 @@ export default function DeliveryScreen() {
     <>
       <Stack.Screen
         options={{
-          title: "Latest Deliveries",
+          title: "Deliveries Today",
           headerTitleAlign: "center",
           animation: "slide_from_right",
           headerLeft: () => (

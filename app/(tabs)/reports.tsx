@@ -23,12 +23,12 @@ const TILES = [
     description: "Revenue & items sold",
   },
   {
-    id: "daily-expenses",
-    label: "Daily Expenses",
-    icon: "receipt-outline",
+    id: "daily-deliveries",
+    label: "Daily Deliveries",
+    icon: "truck-delivery-outline",
     iconColor: "#F59E0B",
     iconBg: "#FEF3C7",
-    description: "Costs & purchases",
+    description: "Deliveries per day",
   },
   {
     id: "profit-report",
@@ -65,6 +65,10 @@ export default function ReportsScreen() {
                       router.push("/components/reports/daily-sales");
                     } else if (tile.id === "profit-report") {
                       router.push("/components/reports/profit-report" as any);
+                    } else if (tile.id === "daily-deliveries") {
+                      router.push(
+                        "/components/reports/daily-deliveries" as any,
+                      );
                     } else {
                       showSnackbar(`${tile.label} — coming soon!`, "info");
                     }

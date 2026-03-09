@@ -24,8 +24,8 @@ async function fetchDeliveries(): Promise<Delivery[]> {
     itemId: row.item_id != null ? Number(row.item_id) : null,
     itemName: row.item_name ?? null,
     quantity: Number(row.quantity ?? 0),
-    unitId: row.unit_id != null ? Number(row.unit_id) : null,
-    unitName: row.unit_name ?? null,
+    uomId: row.uom_id != null ? Number(row.uom_id) : null,
+    uom: row.uom ?? null,
     price: Number(row.price ?? 0),
     total: Number(row.total ?? 0),
   }));
