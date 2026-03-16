@@ -25,10 +25,6 @@ const SORT_OPTIONS: SortOption[] = [
   { key: "total", label: "Total" },
 ];
 
-function fmt(val: number) {
-  return formatCurrency(val);
-}
-
 export default function DailyDeliveriesReport() {
   const { colors } = useAppTheme();
   const [date, setDate] = useState(new Date());
@@ -261,7 +257,7 @@ export default function DailyDeliveriesReport() {
                       <Text
                         style={[styles.footerValue, { color: colors.primary }]}
                       >
-                        {fmt(grandTotal)}
+                        {formatCurrency(grandTotal)}
                       </Text>
                     </View>
                   </View>
@@ -288,11 +284,13 @@ export default function DailyDeliveriesReport() {
                       ) : null}
                     </View>
                     <View style={styles.priceCol}>
-                      <Text style={styles.dataValue}>{fmt(item.price)}</Text>
+                      <Text style={styles.dataValue}>
+                        {formatCurrency(item.price)}
+                      </Text>
                     </View>
                     <View style={styles.priceCol}>
                       <Text style={[styles.dataValue, styles.totalValue]}>
-                        {fmt(item.total)}
+                        {formatCurrency(item.total)}
                       </Text>
                     </View>
                   </View>

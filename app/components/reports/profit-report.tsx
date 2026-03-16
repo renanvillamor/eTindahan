@@ -2,6 +2,7 @@ import SearchFilterBar, {
   SortOption,
 } from "@/app/components/shared/SearchFilterBar";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { formatCurrency } from "@/lib/utils";
 import { useStore } from "@/store/useStore";
 import { router, Stack } from "expo-router";
 import { useMemo } from "react";
@@ -14,27 +15,15 @@ const SORT_OPTIONS: SortOption[] = [
   { key: "profit", label: "Profit" },
 ];
 
-function fmt(val: number): string {
-  return val.toLocaleString("en-PH", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
 export default function ProfitReport() {
   const { colors } = useAppTheme();
   const items = useStore((s) => s.items);
 
   const profitRows = useMemo(() => {
-    return items.map((item) => {
-      const packSize =
-        item.packSize && item.packSize > 0 ? item.packSize : null;
-      const supplierUnitPrice = packSize
-        ? item.supplierPrice / packSize
-        : item.supplierPrice;
-      const profit = item.retailPrice - supplierUnitPrice;
-      return { ...item, supplierUnitPrice, profit };
-    });
+    return items.map((item) => ({
+      ...item,
+      profit: item.retailPrice - item.supplierUnitPrice,
+    }));
   }, [items]);
 
   return (
@@ -153,19 +142,19 @@ export default function ProfitReport() {
                       </View>
                       <View style={styles.priceCol}>
                         <Text style={styles.priceValue}>
-                          {fmt(item.supplierUnitPrice)}
+                          {formatCurrency(item.supplierUnitPrice)}
                         </Text>
                       </View>
                       <View style={styles.priceCol}>
                         <Text style={styles.priceValue}>
-                          {fmt(item.retailPrice)}
+                          {formatCurrency(item.retailPrice)}
                         </Text>
                       </View>
                       <View style={styles.priceCol}>
                         <Text
                           style={[styles.profitValue, { color: profitColor }]}
                         >
-                          {fmt(item.profit)}
+                          {formatCurrency(item.profit)}
                         </Text>
                       </View>
                     </View>

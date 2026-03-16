@@ -1,11 +1,59 @@
 import SearchFilterBar from "@/app/components/shared/SearchFilterBar";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import useSafePush from "@/lib/useSafePush";
+import { Inventory } from "@/models/Inventory";
 import { useGetInventories } from "@/services/useGetInventories";
-import { useMemo, useState } from "react";
+import React, { memo, useMemo, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { FAB, List } from "react-native-paper";
 import { useStore } from "../../store/useStore";
+
+type InventoryRowProps = { item: Inventory; soldToday: number };
+
+const InventoryRow = memo(function InventoryRow({
+  item,
+  soldToday,
+}: InventoryRowProps) {
+  const lastInv = item.actualQty ?? 0;
+  const onHand = lastInv - soldToday;
+  return (
+    <List.Item
+      title={item.name}
+      titleNumberOfLines={1}
+      description={
+        item.uom
+          ? () => <Text className="text-sm text-gray-400">UOM: {item.uom}</Text>
+          : undefined
+      }
+      style={invRowStyle}
+      right={() => (
+        <View className="flex-row items-center">
+          <View className="w-16 items-center">
+            <Text className="text-sm font-medium text-gray-600">
+              {Number.isInteger(lastInv) ? `${lastInv}` : lastInv.toFixed(2)}
+            </Text>
+          </View>
+          <View className="w-16 items-center">
+            <Text className="text-sm font-medium text-gray-600">
+              {soldToday > 0
+                ? Number.isInteger(soldToday)
+                  ? `${soldToday}`
+                  : soldToday.toFixed(2)
+                : "0"}
+            </Text>
+          </View>
+          <View className="w-16 items-center">
+            <Text className="text-sm font-bold">
+              {Number.isInteger(onHand) ? `${onHand}` : onHand.toFixed(2)}
+            </Text>
+          </View>
+        </View>
+      )}
+    />
+  );
+});
+
+const invRowStyle = { paddingVertical: 12, paddingHorizontal: 0 };
 
 export default function InventoryScreen() {
   const { colors } = useAppTheme();
@@ -102,54 +150,12 @@ export default function InventoryScreen() {
                   </Text>
                 </View>
               }
-              renderItem={({ item }) => {
-                const lastInv = item.actualQty ?? 0;
-                const sold = soldTodayByItemId[item.itemId] ?? 0;
-                const onHand = lastInv - sold;
-                return (
-                  <List.Item
-                    title={item.name}
-                    titleNumberOfLines={1}
-                    description={
-                      item.uom
-                        ? () => (
-                            <Text className="text-sm text-gray-400">
-                              UOM: {item.uom}
-                            </Text>
-                          )
-                        : undefined
-                    }
-                    style={styles.listItem}
-                    right={() => (
-                      <View className="flex-row items-center">
-                        <View className="w-16 items-center">
-                          <Text className="text-sm font-medium text-gray-600">
-                            {Number.isInteger(lastInv)
-                              ? `${lastInv}`
-                              : lastInv.toFixed(2)}
-                          </Text>
-                        </View>
-                        <View className="w-16 items-center">
-                          <Text className="text-sm font-medium text-gray-600">
-                            {sold > 0
-                              ? Number.isInteger(sold)
-                                ? `${sold}`
-                                : sold.toFixed(2)
-                              : "0"}
-                          </Text>
-                        </View>
-                        <View className="w-16 items-center">
-                          <Text className="text-sm font-bold">
-                            {Number.isInteger(onHand)
-                              ? `${onHand}`
-                              : onHand.toFixed(2)}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
-                  />
-                );
-              }}
+              renderItem={({ item }) => (
+                <InventoryRow
+                  item={item}
+                  soldToday={soldTodayByItemId[item.itemId] ?? 0}
+                />
+              )}
             />
           );
         }}

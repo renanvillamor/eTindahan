@@ -4,7 +4,7 @@ import { SaleToday } from "@/models/SaleToday";
 import { useGetSalesToday } from "@/services/useGetSalesToday";
 import { useStore } from "@/store/useStore";
 import { format } from "date-fns";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   FlatList,
   RefreshControl,
@@ -13,6 +13,45 @@ import {
   View,
 } from "react-native";
 import { Card, Divider, List, Text } from "react-native-paper";
+
+const SaleTodayRow = memo(function SaleTodayRow({ item }: { item: SaleToday }) {
+  const timeLabel = item.transactionDate
+    ? format(new Date(item.transactionDate), "h:mm a")
+    : null;
+  const isUnsynced = item.synced === false;
+  return (
+    <View className={isUnsynced ? "bg-red-300" : ""}>
+      <List.Item
+        title={item.name}
+        titleNumberOfLines={1}
+        description={() => (
+          <RNText className="text-xs text-gray-500">{timeLabel ?? ""}</RNText>
+        )}
+        descriptionNumberOfLines={1}
+        style={saleRowStyle}
+        right={() => (
+          <View style={saleTotalWrapper}>
+            <RNText className="text-md font-semibold text-gray-800">
+              {formatCurrency(item.total)}
+            </RNText>
+            <RNText className="text-sm text-gray-400 mt-0.5" numberOfLines={1}>
+              {formatCurrency(item.price)} × {item.quantity} {item.uom ?? ""}
+            </RNText>
+          </View>
+        )}
+      />
+    </View>
+  );
+});
+
+const saleRowStyle = { paddingVertical: 4, paddingRight: 8 };
+const saleTotalWrapper = {
+  justifyContent: "center" as const,
+  alignItems: "flex-end" as const,
+  minWidth: 140,
+  maxWidth: 160,
+  paddingRight: 8,
+};
 
 export default function DashboardScreen() {
   const {
@@ -24,6 +63,14 @@ export default function DashboardScreen() {
   const sales = useStore((s) => s.salesToday);
   const setSalesToday = useStore((s) => s.setSalesToday);
 
+  const today = format(new Date(), "yyyy-MM-dd");
+
+  // Guard against persisted yesterday's data showing before the fresh fetch resolves
+  const todaySales = useMemo(
+    () => sales.filter((s) => s.transactionDate.startsWith(today)),
+    [sales, today],
+  );
+
   useEffect(() => {
     if (isSuccess) {
       setSalesToday(dbSales);
@@ -32,24 +79,24 @@ export default function DashboardScreen() {
 
   const sorted = useMemo(
     () =>
-      [...sales].sort((a, b) =>
+      [...todaySales].sort((a, b) =>
         b.transactionDate.localeCompare(a.transactionDate),
       ),
-    [sales],
+    [todaySales],
   );
 
   const byType = useMemo(() => {
     const map: Record<string, number> = {};
-    for (const s of sales) {
+    for (const s of todaySales) {
       const key = s.type ?? "Uncategorized";
       map[key] = (map[key] ?? 0) + s.total;
     }
     return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [sales]);
+  }, [todaySales]);
 
   const grandTotal = useMemo(
-    () => sales.reduce((sum, s) => sum + s.total, 0),
-    [sales],
+    () => todaySales.reduce((sum, s) => sum + s.total, 0),
+    [todaySales],
   );
 
   const [activeType, setActiveType] = useState<string | null>(null);
@@ -62,39 +109,10 @@ export default function DashboardScreen() {
     [sorted, activeType],
   );
 
-  const renderItem = ({ item }: { item: SaleToday }) => {
-    const timeLabel = item.transactionDate
-      ? format(new Date(item.transactionDate), "h:mm a")
-      : null;
-    const isUnsynced = item.synced === false;
-
-    return (
-      <View className={isUnsynced ? "bg-red-300" : ""}>
-        <List.Item
-          title={item.name}
-          titleNumberOfLines={1}
-          description={() => (
-            <RNText className="text-xs text-gray-500">{timeLabel ?? ""}</RNText>
-          )}
-          descriptionNumberOfLines={1}
-          style={[styles.listItem]}
-          right={() => (
-            <View style={styles.totalWrapper}>
-              <RNText className="text-md font-semibold text-gray-800">
-                {formatCurrency(item.total)}
-              </RNText>
-              <RNText
-                className="text-sm text-gray-400 mt-0.5"
-                numberOfLines={1}
-              >
-                {formatCurrency(item.price)} × {item.quantity} {item.uom ?? ""}
-              </RNText>
-            </View>
-          )}
-        />
-      </View>
-    );
-  };
+  const renderItem = useCallback(
+    ({ item }: { item: SaleToday }) => <SaleTodayRow item={item} />,
+    [],
+  );
 
   return (
     <View className="flex-1 bg-white">
@@ -194,16 +212,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#fff",
-  },
-  listItem: {
-    paddingVertical: 4,
-    paddingRight: 8,
-  },
-  totalWrapper: {
-    justifyContent: "center",
-    alignItems: "flex-end",
-    minWidth: 140,
-    maxWidth: 160,
-    paddingRight: 8,
   },
 });

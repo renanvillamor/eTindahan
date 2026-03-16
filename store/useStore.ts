@@ -79,8 +79,11 @@ export const useStore = create<StoreState>()(
       },
       setSalesToday: (dbSales) => {
         set((state) => {
+          const today = new Date().toISOString().slice(0, 10);
           const unsynced = state.salesToday
-            .filter((s) => s.synced === false)
+            .filter(
+              (s) => s.synced === false && s.transactionDate.startsWith(today),
+            )
             .map((s) => ({ ...s }));
           state.salesToday = [
             ...dbSales.map((s) => ({ ...s, synced: true as boolean })),

@@ -45,6 +45,7 @@ async function saveItem(item: Item): Promise<Item> {
     item_id: itemId,
     single_uom_id: item.singleUomId || null,
     pack_uom_id: item.packUomId || null,
+    user_id: user.id,
   };
 
   if (isNew) {
@@ -65,6 +66,7 @@ async function saveItem(item: Item): Promise<Item> {
     wholesale_price: item.wholesalePrice,
     retail_price: item.retailPrice,
     uom_id: item.singleUomId || null,
+    user_id: user.id,
   };
 
   if (isNew) {

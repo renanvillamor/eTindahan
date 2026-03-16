@@ -4,9 +4,12 @@ import { format } from "date-fns";
 import { supabase } from "../lib/supabaseClient";
 
 async function fetchSalesToday(): Promise<SaleToday[]> {
+  const today = format(new Date(), "yyyy-MM-dd");
   const { data, error } = await supabase
-    .from("vw_sales_today")
+    .from("vw_sales")
     .select("*")
+    .gte("transaction_date", today)
+    .lte("transaction_date", today + "T23:59:59")
     .order("transaction_date", { ascending: false });
 
   if (error) throw new Error(error.message);

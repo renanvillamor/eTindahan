@@ -2,9 +2,11 @@ import { useAppTheme } from "@/hooks/useAppTheme";
 import { MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import React from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabLayout() {
   const { colors } = useAppTheme();
+  const { bottom } = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -13,7 +15,8 @@ export default function TabLayout() {
         // to prevent a hydration error in React Navigation v6.
         headerShown: false, //useClientOnlyValue(false, true),
         tabBarStyle: {
-          height: 80,
+          height: 80 + bottom,
+          paddingBottom: bottom,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarItemStyle: { marginVertical: 10 },

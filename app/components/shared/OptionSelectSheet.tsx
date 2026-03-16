@@ -7,6 +7,7 @@ import {
 import { useCallback, useRef } from "react";
 import { Dimensions, StyleSheet, TouchableOpacity, View } from "react-native";
 import { List, Text, TextInput } from "react-native-paper";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export type SelectOption = {
   id: number;
@@ -29,6 +30,7 @@ export default function OptionSelectSheet({
   error,
 }: OptionSelectSheetProps) {
   const { colors } = useAppTheme();
+  const { bottom } = useSafeAreaInsets();
   const modalRef = useRef<BottomSheetModal>(null);
 
   const renderBackdrop = useCallback(
@@ -71,7 +73,9 @@ export default function OptionSelectSheet({
         backgroundStyle={{ backgroundColor: colors.surface }}
         handleIndicatorStyle={{ backgroundColor: colors.outline }}
       >
-        <BottomSheetScrollView>
+        <BottomSheetScrollView
+          contentContainerStyle={{ paddingBottom: bottom }}
+        >
           <View style={styles.header}>
             <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
               {label}

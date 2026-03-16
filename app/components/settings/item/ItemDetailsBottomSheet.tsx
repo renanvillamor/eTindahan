@@ -83,7 +83,13 @@ export default function ItemDetailsBottomSheet({
   );
 
   const uomOptions = useMemo<SelectOption[]>(
-    () => uoms.map((u) => ({ id: u.id, label: u.displayLabel ?? u.name })),
+    () =>
+      uoms
+        .map((u) => ({
+          id: u.id,
+          label: (u.displayLabel ?? u.name) + " - " + u.description,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
     [uoms],
   );
 
@@ -355,7 +361,7 @@ export default function ItemDetailsBottomSheet({
                 render={({ field: { onChange }, fieldState: { error } }) => (
                   <>
                     <OptionSelectSheet
-                      label="Pack"
+                      label="Pack UOM"
                       value={watch("packUomName")}
                       options={uomOptions}
                       onSelect={(opt) => {
@@ -376,7 +382,7 @@ export default function ItemDetailsBottomSheet({
                 render={({ field: { onChange }, fieldState: { error } }) => (
                   <>
                     <OptionSelectSheet
-                      label="Single"
+                      label="Single UOM"
                       value={watch("singleUomName")}
                       options={uomOptions}
                       onSelect={(opt) => {

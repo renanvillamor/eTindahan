@@ -38,13 +38,21 @@ const TILES = [
     iconBg: "#EDE9FE",
     description: "Margins & net profit",
   },
+  {
+    id: "sales-profit-report",
+    label: "Sale vs Profit",
+    icon: "chart-pie",
+    iconColor: "#0891b2",
+    iconBg: "#CFFAFE",
+    description: "Daily sales & profit per type",
+  },
 ];
 
 export default function ReportsScreen() {
   const { showSnackbar } = useSnackbar();
   const today = format(new Date(), "MMMM d, yyyy");
 
-  const rows = [TILES.slice(0, 2), TILES.slice(2, 4)];
+  const rows = [TILES.slice(0, 2), TILES.slice(2, 4), TILES.slice(4)];
 
   return (
     <ScrollView className="flex-1 bg-gray-50" contentContainerClassName="pb-8">
@@ -68,6 +76,10 @@ export default function ReportsScreen() {
                     } else if (tile.id === "daily-deliveries") {
                       router.push(
                         "/components/reports/daily-deliveries" as any,
+                      );
+                    } else if (tile.id === "sales-profit-report") {
+                      router.push(
+                        "/components/reports/sales-profit-report" as any,
                       );
                     } else {
                       showSnackbar(`${tile.label} — coming soon!`, "info");

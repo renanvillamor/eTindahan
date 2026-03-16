@@ -6,6 +6,7 @@ export type Item = {
   typeId: number | null;
   isActive: boolean;
   supplierPrice: number;
+  supplierUnitPrice: number;
   wholesalePrice: number;
   retailPrice: number;
   packUom: string;

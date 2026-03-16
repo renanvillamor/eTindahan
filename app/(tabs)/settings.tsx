@@ -3,8 +3,15 @@ import useSafePush from "@/lib/useSafePush";
 import { useSaveSale } from "@/services/useSaveSale";
 import { useStore } from "@/store/useStore";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { Text as RNText, ScrollView, StyleSheet, View } from "react-native";
+import * as Updates from "expo-updates";
+import { useMemo, useState } from "react";
+import {
+  Alert,
+  Text as RNText,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Card,
@@ -121,9 +128,44 @@ export default function SettingsScreen() {
     queryClient.invalidateQueries({ queryKey: ["inventories"] });
   };
 
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  const handleCheckUpdate = async () => {
+    if (!Updates.isEnabled) {
+      showSnackbar("Updates not available in this build.", "info");
+      return;
+    }
+    setIsCheckingUpdate(true);
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (result.isAvailable) {
+        Alert.alert(
+          "Update Available",
+          "A new version is ready. Restart now to apply it?",
+          [
+            { text: "Later", style: "cancel" },
+            {
+              text: "Restart Now",
+              onPress: async () => {
+                await Updates.fetchUpdateAsync();
+                await Updates.reloadAsync();
+              },
+            },
+          ],
+        );
+      } else {
+        showSnackbar("App is up to date.", "success");
+      }
+    } catch {
+      showSnackbar("Failed to check for updates.", "error");
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
   return (
     <ScrollView
-      className="flex-1 bg-gray-50 pt-12"
+      className="flex-1 bg-gray-50 pt-4"
       contentContainerClassName="px-4 pt-14 pb-8 gap-3"
       showsVerticalScrollIndicator={false}
     >
@@ -204,6 +246,19 @@ export default function SettingsScreen() {
           onPress={() => safePush("/components/settings/account")}
         />
       </View>
+
+      {/* <View className="flex-row gap-3">
+        <SettingsTile
+          icon="cellphone-arrow-down"
+          label="App Update"
+          subtitle="Check and install latest version"
+          accentColor="#009688"
+          onPress={handleCheckUpdate}
+          loading={isCheckingUpdate}
+          disabled={isCheckingUpdate}
+        />
+        <View className="flex-1" />
+      </View> */}
     </ScrollView>
   );
 }
