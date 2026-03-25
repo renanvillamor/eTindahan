@@ -3,15 +3,9 @@ import useSafePush from "@/lib/useSafePush";
 import { useSaveSale } from "@/services/useSaveSale";
 import { useStore } from "@/store/useStore";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-import * as Updates from "expo-updates";
+// import * as Updates from "expo-updates";
 import { useMemo, useState } from "react";
-import {
-  Alert,
-  Text as RNText,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Text as RNText, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
   Card,
@@ -120,6 +114,7 @@ export default function SettingsScreen() {
   };
 
   const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["salesToday"] });
     queryClient.invalidateQueries({ queryKey: ["items"] });
     queryClient.invalidateQueries({ queryKey: ["itemTypes"] });
     queryClient.invalidateQueries({ queryKey: ["uoms"] });
@@ -130,38 +125,38 @@ export default function SettingsScreen() {
 
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
-  const handleCheckUpdate = async () => {
-    if (!Updates.isEnabled) {
-      showSnackbar("Updates not available in this build.", "info");
-      return;
-    }
-    setIsCheckingUpdate(true);
-    try {
-      const result = await Updates.checkForUpdateAsync();
-      if (result.isAvailable) {
-        Alert.alert(
-          "Update Available",
-          "A new version is ready. Restart now to apply it?",
-          [
-            { text: "Later", style: "cancel" },
-            {
-              text: "Restart Now",
-              onPress: async () => {
-                await Updates.fetchUpdateAsync();
-                await Updates.reloadAsync();
-              },
-            },
-          ],
-        );
-      } else {
-        showSnackbar("App is up to date.", "success");
-      }
-    } catch {
-      showSnackbar("Failed to check for updates.", "error");
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  };
+  // const handleCheckUpdate = async () => {
+  //   if (!Updates.isEnabled) {
+  //     showSnackbar("Updates not available in this build.", "info");
+  //     return;
+  //   }
+  //   setIsCheckingUpdate(true);
+  //   try {
+  //     const result = await Updates.checkForUpdateAsync();
+  //     if (result.isAvailable) {
+  //       Alert.alert(
+  //         "Update Available",
+  //         "A new version is ready. Restart now to apply it?",
+  //         [
+  //           { text: "Later", style: "cancel" },
+  //           {
+  //             text: "Restart Now",
+  //             onPress: async () => {
+  //               await Updates.fetchUpdateAsync();
+  //               await Updates.reloadAsync();
+  //             },
+  //           },
+  //         ],
+  //       );
+  //     } else {
+  //       showSnackbar("App is up to date.", "success");
+  //     }
+  //   } catch {
+  //     showSnackbar("Failed to check for updates.", "error");
+  //   } finally {
+  //     setIsCheckingUpdate(false);
+  //   }
+  // };
 
   return (
     <ScrollView

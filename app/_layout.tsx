@@ -1,3 +1,4 @@
+import { NetworkProvider } from "@/lib/NetworkContext";
 import { SnackbarProvider } from "@/lib/SnackbarContext";
 import { useGetItemTypes } from "@/services/useGetItemTypes";
 import { useGetUom } from "@/services/useGetUom";
@@ -18,6 +19,7 @@ import "../global.css";
 import { useAppTheme } from "../hooks/useAppTheme";
 import { supabase } from "../lib/supabaseClient";
 import { useGetItems } from "../services/useGetItems";
+import { useGetSupplierItems } from "../services/useGetSupplierItems";
 import { useGetSuppliers } from "../services/useGetSuppliers";
 
 registerTranslation("en", en);
@@ -85,6 +87,7 @@ function RootLayoutNav() {
   useGetItemTypes();
   useGetUom();
   useGetSuppliers();
+  useGetSupplierItems();
 
   const appTheme = useAppTheme();
 
@@ -123,12 +126,14 @@ function RootLayoutNav() {
     <GestureHandlerRootView style={styles.root}>
       <PaperProvider theme={appTheme}>
         <SnackbarProvider>
-          <BottomSheetModalProvider>
-            <Stack>
-              <Stack.Screen name="auth" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            </Stack>
-          </BottomSheetModalProvider>
+          <NetworkProvider>
+            <BottomSheetModalProvider>
+              <Stack>
+                <Stack.Screen name="auth" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              </Stack>
+            </BottomSheetModalProvider>
+          </NetworkProvider>
         </SnackbarProvider>
       </PaperProvider>
     </GestureHandlerRootView>

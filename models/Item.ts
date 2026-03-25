@@ -14,4 +14,6 @@ export type Item = {
   packSize: number | null;
   singleUom: string;
   singleUomId: number;
+  minThreshold: number | null;
+  maxThreshold: number | null;
 };

@@ -29,7 +29,7 @@ async function fetchTypeSalesReport(
   // Fetch supplier unit prices from vw_item_price (same source as useGetItems)
   const { data: prices, error: priceError } = await supabase
     .from("vw_item_price")
-    .select("item_id, supplier_price, pack_size");
+    .select("id, supplier_price, pack_size");
 
   if (priceError) throw new Error(priceError.message);
 
@@ -37,7 +37,7 @@ async function fetchTypeSalesReport(
   for (const p of prices ?? []) {
     const supplierPrice = Number(p.supplier_price ?? 0);
     const packSize = p.pack_size != null ? Number(p.pack_size) : null;
-    supplierUnitPriceByItemId[Number(p.item_id)] =
+    supplierUnitPriceByItemId[Number(p.id)] =
       packSize && packSize > 0 ? supplierPrice / packSize : supplierPrice;
   }
 

@@ -38,8 +38,7 @@ export function useGetInventories() {
     queryKey: ["inventories"],
     queryFn: fetchInventories,
     staleTime: Infinity,
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
+    enabled: false,
   });
 
   useEffect(() => {

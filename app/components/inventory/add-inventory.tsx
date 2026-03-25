@@ -3,14 +3,15 @@ import SearchFilterBar from "@/app/components/shared/SearchFilterBar";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { useSnackbar } from "@/lib/SnackbarContext";
 import { Item } from "@/models/Item";
+import { Supplier } from "@/models/Supplier";
 import { useSaveInventory } from "@/services/useSaveInventory";
 import { format } from "date-fns";
 import { router, Stack } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
-  FlatList,
   Text as RNText,
   TextInput as RNTextInput,
+  SectionList,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -18,11 +19,57 @@ import {
 import { Button, Icon, IconButton, List, Text } from "react-native-paper";
 import { useStore } from "../../../store/useStore";
 
+function buildSupplierSections<T>(
+  items: T[],
+  getItemId: (item: T) => number,
+  suppliers: Supplier[],
+  itemSupplierMap: Record<number, number[]>,
+): { title: string; supplierId: number | null; data: T[] }[] {
+  const supplierMap = new Map(suppliers.map((s) => [s.id, s.name]));
+  const grouped = new Map<number | null, T[]>();
+
+  for (const item of items) {
+    const itemId = getItemId(item);
+    const supplierIds = itemSupplierMap[itemId];
+    if (supplierIds && supplierIds.length > 0) {
+      for (const sid of supplierIds) {
+        if (!grouped.has(sid)) grouped.set(sid, []);
+        grouped.get(sid)!.push(item);
+      }
+    } else {
+      if (!grouped.has(null)) grouped.set(null, []);
+      grouped.get(null)!.push(item);
+    }
+  }
+
+  const sections: { title: string; supplierId: number | null; data: T[] }[] =
+    [];
+  for (const [sid, data] of grouped.entries()) {
+    if (sid === null) continue;
+    sections.push({
+      title: supplierMap.get(sid) ?? `Supplier #${sid}`,
+      supplierId: sid,
+      data,
+    });
+  }
+  sections.sort((a, b) => a.title.localeCompare(b.title));
+  if (grouped.has(null)) {
+    sections.push({
+      title: "Other",
+      supplierId: null,
+      data: grouped.get(null)!,
+    });
+  }
+  return sections;
+}
+
 export default function AddInventoryScreen() {
   const { colors } = useAppTheme();
   const items = useStore((s) => s.items);
   const inventories = useStore((s) => s.inventories);
   const salesToday = useStore((s) => s.salesToday);
+  const suppliers = useStore((s) => s.suppliers);
+  const supplierItems = useStore((s) => s.supplierItems);
 
   const [qtyByItemId, setQtyByItemId] = useState<Record<number, number>>({});
   const [fractionItemId, setFractionItemId] = useState<number | null>(null);
@@ -31,6 +78,18 @@ export default function AddInventoryScreen() {
   const today = new Date();
 
   const saveInventoryMutation = useSaveInventory();
+
+  // Build reverse map: itemId → supplierId[]
+  const itemSupplierMap = useMemo(() => {
+    const map: Record<number, number[]> = {};
+    for (const [supplierId, itemIds] of Object.entries(supplierItems)) {
+      for (const itemId of itemIds) {
+        if (!map[itemId]) map[itemId] = [];
+        map[itemId].push(Number(supplierId));
+      }
+    }
+    return map;
+  }, [supplierItems]);
 
   // itemId → packSize (how many singles make one pack)
   const packSizeByItemId = useMemo(() => {
@@ -244,12 +303,27 @@ export default function AddInventoryScreen() {
                 }
               });
             }
+            // Group by supplier
+            const sections = buildSupplierSections(
+              filteredItems,
+              (it) => it.id,
+              suppliers,
+              itemSupplierMap,
+            );
+
             return (
-              <FlatList
-                data={filteredItems}
+              <SectionList
+                sections={sections}
                 keyExtractor={(item) => item.id.toString()}
                 ItemSeparatorComponent={() => (
                   <View className="h-px bg-gray-100" />
+                )}
+                renderSectionHeader={({ section }) => (
+                  <View className="px-4 py-1.5 bg-gray-100 border-b border-gray-200">
+                    <RNText className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                      {section.title}
+                    </RNText>
+                  </View>
                 )}
                 renderItem={renderItem}
                 keyboardShouldPersistTaps="handled"

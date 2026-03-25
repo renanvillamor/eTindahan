@@ -1,0 +1,91 @@
+import { useSaveSale } from "@/services/useSaveSale";
+import { useStore } from "@/store/useStore";
+import NetInfo from "@react-native-community/netinfo";
+import { useQueryClient } from "@tanstack/react-query";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { useSnackbar } from "./SnackbarContext";
+
+type NetworkContextValue = {
+  isConnected: boolean;
+};
+
+const NetworkContext = createContext<NetworkContextValue>({
+  isConnected: true,
+});
+
+export function NetworkProvider({ children }: { children: React.ReactNode }) {
+  const [isConnected, setIsConnected] = useState(true);
+  const wasConnected = useRef(true);
+  const isSyncing = useRef(false);
+
+  const queryClient = useQueryClient();
+  const { showSnackbar } = useSnackbar();
+  const { mutateAsync: saveSales } = useSaveSale();
+  const clearUnsyncedSales = useStore((s) => s.clearUnsyncedSales);
+  const setSalesToday = useStore((s) => s.setSalesToday);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(async (state) => {
+      const connected = state.isConnected === true;
+      setIsConnected(connected);
+
+      if (connected && !wasConnected.current) {
+        // Just came back online
+        wasConnected.current = true;
+
+        // Auto-sync any unsynced sales
+        if (!isSyncing.current) {
+          const unsynced = useStore
+            .getState()
+            .salesToday.filter((s) => s.synced === false);
+
+          if (unsynced.length > 0) {
+            isSyncing.current = true;
+            try {
+              await saveSales(unsynced);
+              clearUnsyncedSales();
+              showSnackbar(
+                `${unsynced.length} sale(s) synced successfully.`,
+                "success",
+              );
+            } catch {
+              showSnackbar(
+                "Auto-sync failed. Tap Sync Data in Settings to retry.",
+                "error",
+              );
+            } finally {
+              isSyncing.current = false;
+            }
+          }
+        }
+
+        // Re-fetch all master data so the app is up to date
+        queryClient.invalidateQueries({ queryKey: ["salesToday"] });
+        queryClient.invalidateQueries({ queryKey: ["items"] });
+        queryClient.invalidateQueries({ queryKey: ["itemTypes"] });
+        queryClient.invalidateQueries({ queryKey: ["uoms"] });
+        queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+        queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+        queryClient.invalidateQueries({ queryKey: ["inventories"] });
+      } else if (!connected && wasConnected.current) {
+        wasConnected.current = false;
+      }
+    });
+
+    return unsubscribe;
+  }, [saveSales, clearUnsyncedSales, setSalesToday, queryClient, showSnackbar]);
+
+  return (
+    <NetworkContext.Provider value={{ isConnected }}>
+      {children}
+    </NetworkContext.Provider>
+  );
+}
+
+export const useNetwork = () => useContext(NetworkContext);

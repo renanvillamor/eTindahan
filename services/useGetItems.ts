@@ -28,6 +28,8 @@ async function fetchItems(): Promise<Item[]> {
     singleUomId: row.single_uom_id ?? null,
     singleUom: row.single_uom ?? null,
     packSize: row.pack_size != null ? Number(row.pack_size) : null,
+    minThreshold: row.min_threshold != null ? Number(row.min_threshold) : null,
+    maxThreshold: row.max_threshold != null ? Number(row.max_threshold) : null,
     supplierUnitPrice: (() => {
       const supplierPrice = Number(row.supplier_price ?? 0);
       const packSize = row.pack_size != null ? Number(row.pack_size) : null;

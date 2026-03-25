@@ -36,5 +36,6 @@ export function useGetSalesToday() {
     queryKey: ["salesToday", format(new Date(), "yyyy-MM-dd")],
     queryFn: fetchSalesToday,
     staleTime: Infinity,
+    enabled: false,
   });
 }

@@ -16,6 +16,8 @@ async function saveItem(item: Item): Promise<Item> {
     description: item.description ?? null,
     type_id: item.typeId ?? null,
     is_active: item.isActive,
+    min_threshold: item.minThreshold ?? null,
+    max_threshold: item.maxThreshold ?? null,
     ...(isNew ? { user_id: user.id } : {}),
   };
 

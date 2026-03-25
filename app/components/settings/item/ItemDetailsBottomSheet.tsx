@@ -35,6 +35,8 @@ type FormValues = {
   packUomName: string;
   singleUomId: number;
   singleUomName: string;
+  minThreshold: string;
+  maxThreshold: string;
 };
 
 export default function ItemDetailsBottomSheet({
@@ -75,6 +77,8 @@ export default function ItemDetailsBottomSheet({
       packUomName: "",
       singleUomId: 0,
       singleUomName: "",
+      minThreshold: "",
+      maxThreshold: "",
     },
   });
   const itemTypeOptions = useMemo<SelectOption[]>(
@@ -108,6 +112,10 @@ export default function ItemDetailsBottomSheet({
         packUomName: item?.packUom ?? "",
         singleUomId: item?.singleUomId ?? 0,
         singleUomName: item?.singleUom ?? "",
+        minThreshold:
+          item?.minThreshold != null ? String(item.minThreshold) : "",
+        maxThreshold:
+          item?.maxThreshold != null ? String(item.maxThreshold) : "",
       });
       // Validate immediately so isValid reflects the reset values
       trigger();
@@ -152,6 +160,8 @@ export default function ItemDetailsBottomSheet({
       packUom: data.packUomName,
       singleUomId: data.singleUomId,
       singleUom: data.singleUomName,
+      minThreshold: data.minThreshold !== "" ? Number(data.minThreshold) : null,
+      maxThreshold: data.maxThreshold !== "" ? Number(data.maxThreshold) : null,
     };
     onSave(updatedItem);
   };
@@ -392,6 +402,65 @@ export default function ItemDetailsBottomSheet({
                       error={!!error}
                     />
                   </>
+                )}
+              />
+            </View>
+          </View>
+
+          {/* Thresholds — 2 columns */}
+          <Text style={styles.sectionLabel}>Stock Thresholds</Text>
+          <View style={styles.row}>
+            <View style={styles.col}>
+              <Controller
+                control={control}
+                name="minThreshold"
+                rules={{
+                  validate: (v) =>
+                    v === "" ||
+                    (!isNaN(Number(v)) && Number(v) >= 0) ||
+                    "Invalid",
+                }}
+                render={({
+                  field: { value, onChange, onBlur },
+                  fieldState: { error },
+                }) => (
+                  <TextInput
+                    label="Min (Reorder)"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    keyboardType="numeric"
+                    mode="outlined"
+                    error={!!error}
+                    placeholder="Optional"
+                  />
+                )}
+              />
+            </View>
+            <View style={styles.col}>
+              <Controller
+                control={control}
+                name="maxThreshold"
+                rules={{
+                  validate: (v) =>
+                    v === "" ||
+                    (!isNaN(Number(v)) && Number(v) >= 0) ||
+                    "Invalid",
+                }}
+                render={({
+                  field: { value, onChange, onBlur },
+                  fieldState: { error },
+                }) => (
+                  <TextInput
+                    label="Max (Overstock)"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    keyboardType="numeric"
+                    mode="outlined"
+                    error={!!error}
+                    placeholder="Optional"
+                  />
                 )}
               />
             </View>

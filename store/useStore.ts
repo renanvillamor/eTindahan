@@ -18,6 +18,7 @@ type StoreState = {
   suppliers: Supplier[];
   uoms: Uom[];
   salesToday: SaleToday[];
+  supplierItems: Record<number, number[]>;
   setItems: (items: Item[]) => void;
   setItemTypes: (itemTypes: ItemType[]) => void;
   setInventories: (inventories: Inventory[]) => void;
@@ -27,6 +28,7 @@ type StoreState = {
   setSalesToday: (dbSales: SaleToday[]) => void;
   addSalesToday: (sales: SaleToday[]) => void;
   clearUnsyncedSales: () => void;
+  setSupplierItems: (map: Record<number, number[]>) => void;
   updateItem: (item: Item) => void;
   removeItem: (itemId: number) => void;
   updateItemType: (itemType: ItemType) => void;
@@ -47,6 +49,7 @@ export const useStore = create<StoreState>()(
       suppliers: [],
       uoms: [],
       salesToday: [],
+      supplierItems: {},
       setItems: (items) => {
         set((state) => {
           state.items = items;
@@ -99,6 +102,11 @@ export const useStore = create<StoreState>()(
       clearUnsyncedSales: () => {
         set((state) => {
           state.salesToday = state.salesToday.filter((s) => s.synced !== false);
+        });
+      },
+      setSupplierItems: (map) => {
+        set((state) => {
+          state.supplierItems = map;
         });
       },
       updateItem: (item) => {

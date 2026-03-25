@@ -23,6 +23,7 @@ export default function AddDeliveryScreen() {
   const { showSnackbar } = useSnackbar();
   const items = useStore((s) => s.items);
   const suppliers = useStore((s) => (s as any).suppliers ?? []);
+  const supplierItems = useStore((s) => s.supplierItems);
   const saveDeliveryMutation = useSaveDelivery();
 
   const [qtyByItemId, setQtyByItemId] = useState<Record<number, number>>({});
@@ -70,13 +71,11 @@ export default function AddDeliveryScreen() {
       );
     }
     if (selectedSupplier) {
-      // if items have supplierId use it, otherwise keep results unchanged
-      results = results.filter((it: any) =>
-        it.supplierId ? Number(it.supplierId) === selectedSupplier : true,
-      );
+      const allowedItemIds = new Set(supplierItems[selectedSupplier] ?? []);
+      results = results.filter((it) => allowedItemIds.has(it.id));
     }
     return results;
-  }, [items, query, selectedSupplier]);
+  }, [items, query, selectedSupplier, supplierItems]);
 
   const selectedSupplierName = useMemo(() => {
     if (!selectedSupplier) return null;

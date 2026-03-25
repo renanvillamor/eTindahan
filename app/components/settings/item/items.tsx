@@ -3,7 +3,7 @@ import { Item } from "@/models/Item";
 import { useDeleteItem } from "@/services/useDeleteItem";
 import { useSaveItem } from "@/services/useSaveItem";
 import { router, Stack } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { FAB, IconButton } from "react-native-paper";
 import { useStore } from "../../../../store/useStore";
@@ -15,8 +15,22 @@ import ItemList from "./ItemList";
 export default function ItemsScreen() {
   const { showSnackbar } = useSnackbar();
   const items = useStore((s) => s.items) ?? [];
+  const suppliers = useStore((s) => s.suppliers) ?? [];
+  const supplierItems = useStore((s) => s.supplierItems) ?? {};
   const updateItem = useStore((s) => s.updateItem);
   const removeItem = useStore((s) => s.removeItem);
+
+  // Build reverse map: itemId → supplierId[]
+  const itemSupplierMap = useMemo(() => {
+    const map: Record<number, number[]> = {};
+    for (const [supplierId, itemIds] of Object.entries(supplierItems)) {
+      for (const itemId of itemIds) {
+        if (!map[itemId]) map[itemId] = [];
+        map[itemId].push(Number(supplierId));
+      }
+    }
+    return map;
+  }, [supplierItems]);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<number | null>(null);
   const [isAddMode, setIsAddMode] = useState(false);
@@ -128,6 +142,8 @@ export default function ItemsScreen() {
             return (
               <ItemList
                 items={filtered}
+                suppliers={suppliers}
+                supplierItems={itemSupplierMap}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />

@@ -27,11 +27,15 @@ type TableItem = {
   typeId: number | null;
   uom: string | null;
   qtyByDate: Record<string, number>;
+  minThreshold: number | null;
+  maxThreshold: number | null;
 };
 
 export default function DailyInventoryReport() {
   const { colors } = useAppTheme();
   const items = useStore((s) => s.items);
+  const suppliers = useStore((s) => s.suppliers);
+  const supplierItems = useStore((s) => s.supplierItems);
 
   const today = new Date();
   const [fromDate, setFromDate] = useState(() => subDays(today, MAX_DAYS - 1));
@@ -70,6 +74,24 @@ export default function DailyInventoryReport() {
     if (!rawData) return [];
     return Array.from(new Set(rawData.map((r) => r.itemId)));
   }, [rawData]);
+
+  // Build reverse map: itemId → supplierId[]
+  const itemSupplierMap = useMemo(() => {
+    const map: Record<number, number[]> = {};
+    for (const [supplierId, itemIds] of Object.entries(supplierItems)) {
+      for (const itemId of itemIds) {
+        if (!map[itemId]) map[itemId] = [];
+        map[itemId].push(Number(supplierId));
+      }
+    }
+    return map;
+  }, [supplierItems]);
+
+  // supplierName map
+  const supplierNameMap = useMemo(
+    () => new Map(suppliers.map((s) => [s.id, s.name])),
+    [suppliers],
+  );
 
   return (
     <>
@@ -140,6 +162,8 @@ export default function DailyInventoryReport() {
                   typeId: item?.typeId ?? null,
                   uom: item?.packUom ?? null,
                   qtyByDate: qtyMap[itemId] ?? {},
+                  minThreshold: item?.minThreshold ?? null,
+                  maxThreshold: item?.maxThreshold ?? null,
                 };
               })
               .filter((row) => {
@@ -231,58 +255,149 @@ export default function DailyInventoryReport() {
                     keyboardShouldPersistTaps="handled"
                     style={styles.tableBodyScroll}
                   >
-                    {tableItems.map((item, idx) => (
-                      <View key={item.itemId}>
-                        <View
-                          style={[
-                            styles.dataRow,
-                            idx % 2 === 1 && styles.altRow,
-                          ]}
-                        >
-                          <View style={[styles.nameCol, styles.dataCell]}>
-                            <Text style={styles.itemName} numberOfLines={2}>
-                              {item.itemName}
+                    {(() => {
+                      // Group tableItems by supplier
+                      const grouped = new Map<number | null, TableItem[]>();
+                      for (const item of tableItems) {
+                        const supplierIds = itemSupplierMap[item.itemId];
+                        if (supplierIds && supplierIds.length > 0) {
+                          for (const sid of supplierIds) {
+                            if (!grouped.has(sid)) grouped.set(sid, []);
+                            grouped.get(sid)!.push(item);
+                          }
+                        } else {
+                          if (!grouped.has(null)) grouped.set(null, []);
+                          grouped.get(null)!.push(item);
+                        }
+                      }
+                      const sections: {
+                        supplierId: number | null;
+                        title: string;
+                        items: TableItem[];
+                      }[] = [];
+                      for (const [sid, its] of grouped.entries()) {
+                        if (sid === null) continue;
+                        sections.push({
+                          supplierId: sid,
+                          title: supplierNameMap.get(sid) ?? `Supplier #${sid}`,
+                          items: its,
+                        });
+                      }
+                      sections.sort((a, b) => a.title.localeCompare(b.title));
+                      if (grouped.has(null))
+                        sections.push({
+                          supplierId: null,
+                          title: "Other",
+                          items: grouped.get(null)!,
+                        });
+
+                      let globalIdx = 0;
+                      return sections.map((section) => (
+                        <View key={section.supplierId ?? "other"}>
+                          {/* Supplier header row */}
+                          <View style={styles.supplierHeaderRow}>
+                            <Text style={styles.supplierHeaderText}>
+                              {section.title}
                             </Text>
                           </View>
-                          {dateCols.map((d) => {
-                            const qty = item.qtyByDate[d];
-                            const has = qty != null;
+                          {section.items.map((item) => {
+                            const idx = globalIdx++;
                             return (
-                              <View
-                                key={d}
-                                style={[
-                                  styles.dateCol,
-                                  styles.dataCell,
-                                  styles.qtyCell,
-                                ]}
-                              >
-                                <Text
+                              <View key={item.itemId}>
+                                <View
                                   style={[
-                                    styles.qtyValue,
-                                    {
-                                      color: has ? colors.onSurface : "#d1d5db",
-                                    },
+                                    styles.dataRow,
+                                    idx % 2 === 1 && styles.altRow,
                                   ]}
                                 >
-                                  {has ? qty : "\u2014"}
-                                </Text>
-                                {has && item.uom ? (
-                                  <Text
-                                    style={[
-                                      styles.qtyUnit,
-                                      { color: colors.onSurfaceVariant },
-                                    ]}
+                                  <View
+                                    style={[styles.nameCol, styles.dataCell]}
                                   >
-                                    {item.uom + "/s"}
-                                  </Text>
-                                ) : null}
+                                    <Text
+                                      style={styles.itemName}
+                                      numberOfLines={2}
+                                    >
+                                      {item.itemName}
+                                    </Text>
+                                  </View>
+                                  {dateCols.map((d) => {
+                                    const qty = item.qtyByDate[d];
+                                    const has = qty != null;
+
+                                    const isLow =
+                                      has &&
+                                      item.minThreshold != null &&
+                                      qty <= item.minThreshold;
+                                    const isHigh =
+                                      has &&
+                                      item.maxThreshold != null &&
+                                      qty >= item.maxThreshold;
+
+                                    const cellBg = isHigh
+                                      ? "#fee2e2"
+                                      : isLow
+                                        ? "#ffedd5"
+                                        : undefined;
+
+                                    return (
+                                      <View
+                                        key={d}
+                                        style={[
+                                          styles.dateCol,
+                                          styles.dataCell,
+                                          styles.qtyCell,
+                                          cellBg
+                                            ? { backgroundColor: cellBg }
+                                            : null,
+                                        ]}
+                                      >
+                                        <Text
+                                          style={[
+                                            styles.qtyValue,
+                                            {
+                                              color: isHigh
+                                                ? "#dc2626"
+                                                : isLow
+                                                  ? "#ea580c"
+                                                  : has
+                                                    ? colors.onSurface
+                                                    : "#d1d5db",
+                                            },
+                                          ]}
+                                        >
+                                          {has
+                                            ? Number.isInteger(qty)
+                                              ? qty
+                                              : qty.toFixed(2)
+                                            : "\u2014"}
+                                        </Text>
+                                        {has && item.uom ? (
+                                          <Text
+                                            style={[
+                                              styles.qtyUnit,
+                                              {
+                                                color: isHigh
+                                                  ? "#dc2626"
+                                                  : isLow
+                                                    ? "#ea580c"
+                                                    : colors.onSurfaceVariant,
+                                              },
+                                            ]}
+                                          >
+                                            {item.uom + "/s"}
+                                          </Text>
+                                        ) : null}
+                                      </View>
+                                    );
+                                  })}
+                                </View>
+                                <Divider />
                               </View>
                             );
                           })}
                         </View>
-                        <Divider />
-                      </View>
-                    ))}
+                      ));
+                    })()}
                   </ScrollView>
                 </View>
               </ScrollView>
@@ -300,6 +415,20 @@ const styles = StyleSheet.create({
   },
   tableBodyScroll: {
     flex: 1,
+  },
+  supplierHeaderRow: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    backgroundColor: "#f1f5f9",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  supplierHeaderText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#475569",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
   headerRow: {
     flexDirection: "row",

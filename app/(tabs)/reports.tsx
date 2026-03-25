@@ -46,13 +46,21 @@ const TILES = [
     iconBg: "#CFFAFE",
     description: "Daily sales & profit per type",
   },
+  {
+    id: "inventory-variance",
+    label: "Inventory Variance",
+    icon: "scale-balance",
+    iconColor: "#d97706",
+    iconBg: "#FEF3C7",
+    description: "On hand vs actual quantity",
+  },
 ];
 
 export default function ReportsScreen() {
   const { showSnackbar } = useSnackbar();
   const today = format(new Date(), "MMMM d, yyyy");
 
-  const rows = [TILES.slice(0, 2), TILES.slice(2, 4), TILES.slice(4)];
+  const rows = [TILES.slice(0, 2), TILES.slice(2, 4), TILES.slice(4, 6)];
 
   return (
     <ScrollView className="flex-1 bg-gray-50" contentContainerClassName="pb-8">
@@ -80,6 +88,10 @@ export default function ReportsScreen() {
                     } else if (tile.id === "sales-profit-report") {
                       router.push(
                         "/components/reports/sales-profit-report" as any,
+                      );
+                    } else if (tile.id === "inventory-variance") {
+                      router.push(
+                        "/components/reports/inventory-variance" as any,
                       );
                     } else {
                       showSnackbar(`${tile.label} — coming soon!`, "info");
