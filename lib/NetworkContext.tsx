@@ -1,3 +1,4 @@
+import { syncPendingDeletions } from "@/services/useDeleteSale";
 import { useSaveSale } from "@/services/useSaveSale";
 import { useStore } from "@/store/useStore";
 import NetInfo from "@react-native-community/netinfo";
@@ -28,6 +29,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const { showSnackbar } = useSnackbar();
   const { mutateAsync: saveSales } = useSaveSale();
   const clearUnsyncedSales = useStore((s) => s.clearUnsyncedSales);
+  const clearDeletedSales = useStore((s) => s.clearDeletedSales);
   const setSalesToday = useStore((s) => s.setSalesToday);
 
   useEffect(() => {
@@ -39,19 +41,28 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
         // Just came back online
         wasConnected.current = true;
 
-        // Auto-sync any unsynced sales
+        // Auto-sync any unsynced sales and pending deletions
         if (!isSyncing.current) {
           const unsynced = useStore
             .getState()
             .salesToday.filter((s) => s.synced === false);
+          const pendingDeletes = useStore
+            .getState()
+            .salesToday.filter((s) => s.pendingDelete === true && s.id > 0);
 
-          if (unsynced.length > 0) {
+          if (unsynced.length > 0 || pendingDeletes.length > 0) {
             isSyncing.current = true;
             try {
-              await saveSales(unsynced);
-              clearUnsyncedSales();
+              if (unsynced.length > 0) {
+                await saveSales(unsynced);
+                clearUnsyncedSales();
+              }
+              if (pendingDeletes.length > 0) {
+                await syncPendingDeletions(pendingDeletes.map((s) => s.id));
+                clearDeletedSales();
+              }
               showSnackbar(
-                `${unsynced.length} sale(s) synced successfully.`,
+                `${unsynced.length + pendingDeletes.length} change(s) synced successfully.`,
                 "success",
               );
             } catch {
@@ -66,7 +77,10 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Re-fetch all master data so the app is up to date
-        queryClient.invalidateQueries({ queryKey: ["salesToday"] });
+        queryClient.invalidateQueries({
+          queryKey: ["salesToday"],
+          exact: false,
+        });
         queryClient.invalidateQueries({ queryKey: ["items"] });
         queryClient.invalidateQueries({ queryKey: ["itemTypes"] });
         queryClient.invalidateQueries({ queryKey: ["uoms"] });
@@ -79,7 +93,14 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     });
 
     return unsubscribe;
-  }, [saveSales, clearUnsyncedSales, setSalesToday, queryClient, showSnackbar]);
+  }, [
+    saveSales,
+    clearUnsyncedSales,
+    clearDeletedSales,
+    setSalesToday,
+    queryClient,
+    showSnackbar,
+  ]);
 
   return (
     <NetworkContext.Provider value={{ isConnected }}>

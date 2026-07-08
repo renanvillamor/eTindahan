@@ -12,4 +12,7 @@ export type SaleToday = {
   total: number;
   createdBy: string | null;
   synced?: boolean;
+  pendingDelete?: boolean;
+  paymentModeId?: number | null;
+  paymentMode?: string | null;
 };

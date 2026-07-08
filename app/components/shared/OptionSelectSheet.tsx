@@ -20,6 +20,7 @@ type OptionSelectSheetProps = {
   options: SelectOption[];
   onSelect: (option: SelectOption) => void;
   error?: boolean;
+  dense?: boolean;
 };
 
 export default function OptionSelectSheet({
@@ -28,6 +29,7 @@ export default function OptionSelectSheet({
   options,
   onSelect,
   error,
+  dense,
 }: OptionSelectSheetProps) {
   const { colors } = useAppTheme();
   const { bottom } = useSafeAreaInsets();
@@ -54,6 +56,7 @@ export default function OptionSelectSheet({
           mode="outlined"
           editable={false}
           error={error}
+          dense={dense}
           right={
             <TextInput.Icon
               icon="chevron-down"

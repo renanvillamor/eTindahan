@@ -4,6 +4,7 @@ import { ReactNode, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Chip, Icon, Searchbar } from "react-native-paper";
 import SortModal from "./SortModal";
+import { Supplier } from "@/models/Supplier";
 
 export type SortDir = "asc" | "desc";
 
@@ -22,9 +23,12 @@ const DEFAULT_SORT_OPTIONS: SortOption[] = [
 type Props = {
   placeholder?: string;
   sortOptions?: SortOption[];
+  showSupplierFilter?: boolean;
+  suppliers?: Supplier[];
   children: (
     query: string,
     selectedTypeId: number | null,
+    selectedSupplierId: number | null,
     sortKey: string | null,
     sortDir: SortDir,
   ) => ReactNode;
@@ -33,6 +37,8 @@ type Props = {
 export default function SearchFilterBar({
   placeholder = "Search",
   sortOptions = DEFAULT_SORT_OPTIONS,
+  showSupplierFilter = false,
+  suppliers = [],
   children,
 }: Props) {
   const { colors } = useAppTheme();
@@ -41,6 +47,7 @@ export default function SearchFilterBar({
 
   const [query, setQuery] = useState("");
   const [selectedType, setSelectedType] = useState<number | null>(null);
+  const [selectedSupplier, setSelectedSupplier] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [sortModalOpen, setSortModalOpen] = useState(false);
@@ -62,7 +69,7 @@ export default function SearchFilterBar({
 
   const activeSortLabel = sortOptions.find((o) => o.key === sortKey)?.label;
 
-  return (
+return (
     <View className="flex-1">
       <View className="px-4">
         <Searchbar
@@ -97,6 +104,26 @@ export default function SearchFilterBar({
                 }
               >
                 {t.description}
+              </Chip>
+            ))}
+            {showSupplierFilter && suppliers.map((s) => (
+              <Chip
+                key={`supplier-${s.id}`}
+                mode="outlined"
+                selected={selectedSupplier === s.id}
+                showSelectedCheck={false}
+                onPress={() =>
+                  setSelectedSupplier(selectedSupplier === s.id ? null : s.id)
+                }
+                style={[
+                  styles.chip,
+                  selectedSupplier === s.id && styles.selectedChip,
+                ]}
+                textStyle={
+                  selectedSupplier === s.id ? styles.selectedText : undefined
+                }
+              >
+                {s.name}
               </Chip>
             ))}
           </ScrollView>
@@ -139,7 +166,7 @@ export default function SearchFilterBar({
       />
 
       <View style={{ flex: 1 }}>
-        {children(query, selectedType, sortKey, sortDir)}
+        {children(query, selectedType, selectedSupplier, sortKey, sortDir)}
       </View>
     </View>
   );

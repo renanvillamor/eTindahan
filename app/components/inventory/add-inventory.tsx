@@ -4,10 +4,13 @@ import { useAppTheme } from "@/hooks/useAppTheme";
 import { useSnackbar } from "@/lib/SnackbarContext";
 import { Item } from "@/models/Item";
 import { Supplier } from "@/models/Supplier";
+import { useGetDeliveries } from "@/services/useGetDeliveries";
+import { useGetInventories } from "@/services/useGetInventories";
+import { useGetSalesToday } from "@/services/useGetSalesToday";
 import { useSaveInventory } from "@/services/useSaveInventory";
 import { format } from "date-fns";
 import { router, Stack } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Text as RNText,
   TextInput as RNTextInput,
@@ -68,6 +71,7 @@ export default function AddInventoryScreen() {
   const items = useStore((s) => s.items);
   const inventories = useStore((s) => s.inventories);
   const salesToday = useStore((s) => s.salesToday);
+  const deliveries = useStore((s) => s.deliveries);
   const suppliers = useStore((s) => s.suppliers);
   const supplierItems = useStore((s) => s.supplierItems);
 
@@ -78,6 +82,24 @@ export default function AddInventoryScreen() {
   const today = new Date();
 
   const saveInventoryMutation = useSaveInventory();
+
+  // Ensure all required data is loaded when this screen mounts so that
+  // qty_on_hand is calculated correctly from real store values.
+  const { refetch: refetchInventories, isFetching: isFetchingInventories } =
+    useGetInventories();
+  const { refetch: refetchSalesToday, isFetching: isFetchingSales } =
+    useGetSalesToday();
+  const { isFetching: isFetchingDeliveries } = useGetDeliveries();
+
+  const isLoading =
+    isFetchingInventories || isFetchingSales || isFetchingDeliveries;
+
+  useEffect(() => {
+    refetchInventories();
+    refetchSalesToday();
+    // useGetDeliveries auto-fetches on mount (no enabled:false), so no
+    // explicit refetch needed.
+  }, []);
 
   // Build reverse map: itemId → supplierId[]
   const itemSupplierMap = useMemo(() => {
@@ -100,22 +122,34 @@ export default function AddInventoryScreen() {
     return map;
   }, [inventories]);
 
-  // Map itemId → qty on hand (same calculation as inventory screen)
+  // Map itemId → qty on hand (last actual count + delivered today − sold today)
   const onHandByItemId = useMemo(() => {
     const soldMap: Record<number, number> = {};
     for (const s of salesToday) {
       const packSize = packSizeByItemId[s.itemId] ?? 1;
       soldMap[s.itemId] = (soldMap[s.itemId] ?? 0) + s.quantity / packSize;
     }
+    const deliveredMap: Record<number, number> = {};
+    for (const d of deliveries) {
+      if (d.itemId == null) continue;
+      deliveredMap[d.itemId] = (deliveredMap[d.itemId] ?? 0) + d.quantity;
+    }
+    // Build a quick lookup so we can cover ALL items, not just those with
+    // an existing inventory record (new items would otherwise default to 0).
+    const invByItemId = new Map(inventories.map((inv) => [inv.itemId, inv]));
     const map: Record<number, number> = {};
-    for (const inv of inventories) {
-      map[inv.itemId] = (inv.actualQty ?? 0) - (soldMap[inv.itemId] ?? 0);
+    for (const item of items) {
+      const inv = invByItemId.get(item.id);
+      map[item.id] =
+        (inv?.actualQty ?? 0) +
+        (deliveredMap[item.id] ?? 0) -
+        (soldMap[item.id] ?? 0);
     }
     return map;
-  }, [inventories, salesToday, packSizeByItemId]);
+  }, [items, inventories, salesToday, deliveries, packSizeByItemId]);
 
   const dirtyEntries = useMemo(() => {
-    return items.filter((it) => (qtyByItemId[it.id] ?? 0) > 0);
+    return items.filter((it) => it.id in qtyByItemId);
   }, [items, qtyByItemId]);
 
   const getQty = useCallback(
@@ -125,13 +159,7 @@ export default function AddInventoryScreen() {
 
   const setQty = useCallback((itemId: number, value: number) => {
     const clamped = Math.max(0, value);
-    setQtyByItemId((prev) => {
-      if (clamped === 0) {
-        const { [itemId]: _, ...rest } = prev;
-        return rest;
-      }
-      return { ...prev, [itemId]: clamped };
-    });
+    setQtyByItemId((prev) => ({ ...prev, [itemId]: clamped }));
   }, []);
 
   const handleTextChange = useCallback(
@@ -143,12 +171,21 @@ export default function AddInventoryScreen() {
   );
 
   const handleSave = () => {
-    const entries = dirtyEntries.map((item) => ({
-      item_id: item.id,
-      qty_on_hand: onHandByItemId[item.id] ?? 0,
-      actual_qty: qtyByItemId[item.id],
-      uom_id: item.packUomId,
-    }));
+    const missingUom = items.filter((it) => it.isActive && !it.packUomId);
+    if (missingUom.length > 0) {
+      const names = missingUom.map((it) => it.name).join(", ");
+      showSnackbar(`Items missing Pack UOM: ${names}`, "error");
+      return;
+    }
+
+    const entries = items
+      .filter((it) => it.isActive)
+      .map((item) => ({
+        item_id: item.id,
+        qty_on_hand: onHandByItemId[item.id] ?? 0,
+        actual_qty: qtyByItemId[item.id] ?? 0,
+        uom_id: item.packUomId,
+      }));
 
     saveInventoryMutation.mutate(
       { createdDate: format(today, "yyyy-MM-dd"), entries },
@@ -274,15 +311,19 @@ export default function AddInventoryScreen() {
           </View>
         </View>
 
-        <SearchFilterBar placeholder="Search items">
-          {(query, selectedType, sortKey, sortDir) => {
+        <SearchFilterBar placeholder="Search items" showSupplierFilter suppliers={suppliers}>
+          {(query, selectedType, selectedSupplierId, sortKey, sortDir) => {
             let filteredItems = items
               .filter((it) => it.isActive)
               .filter((it) => {
                 const q = query.trim().toLowerCase();
+                const matchesSupplier =
+                  !selectedSupplierId ||
+                  (itemSupplierMap[it.id] ?? []).includes(selectedSupplierId);
                 return (
                   (!q || (it.name ?? "").toLowerCase().includes(q)) &&
-                  (!selectedType || it.typeId === selectedType)
+                  (!selectedType || it.typeId === selectedType) &&
+                  matchesSupplier
                 );
               });
             if (sortKey) {
@@ -355,9 +396,11 @@ export default function AddInventoryScreen() {
             mode="contained"
             onPress={handleSave}
             disabled={
-              dirtyEntries.length === 0 || saveInventoryMutation.isPending
+              dirtyEntries.length === 0 ||
+              saveInventoryMutation.isPending ||
+              isLoading
             }
-            loading={saveInventoryMutation.isPending}
+            loading={saveInventoryMutation.isPending || isLoading}
           >
             Save Changes
           </Button>

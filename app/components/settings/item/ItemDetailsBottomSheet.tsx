@@ -4,10 +4,10 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { StyleSheet, Text, View } from "react-native";
-import { Button, Switch, TextInput } from "react-native-paper";
+import { Button, Chip, Switch, TextInput } from "react-native-paper";
 import { useStore } from "../../../../store/useStore";
 import OptionSelectSheet, {
   SelectOption,
@@ -18,7 +18,7 @@ type ItemDetailsBottomSheetProps = {
   item: Item | null;
   isAddMode: boolean;
   isLoading?: boolean;
-  onSave: (item: Item) => void;
+  onSave: (item: Item, supplierIds: number[]) => void;
   onDismiss: () => void;
 };
 
@@ -53,6 +53,18 @@ export default function ItemDetailsBottomSheet({
 
   const itemTypes = useStore((s) => s.itemTypes) ?? [];
   const uoms = useStore((s) => s.uoms) ?? [];
+  const suppliers = useStore((s) => s.suppliers) ?? [];
+  const supplierItems = useStore((s) => s.supplierItems) ?? {};
+
+  const [selectedSupplierIds, setSelectedSupplierIds] = useState<number[]>([]);
+
+  const toggleSupplier = (supplierId: number) => {
+    setSelectedSupplierIds((prev) =>
+      prev.includes(supplierId)
+        ? prev.filter((id) => id !== supplierId)
+        : [...prev, supplierId],
+    );
+  };
 
   const {
     control,
@@ -99,6 +111,14 @@ export default function ItemDetailsBottomSheet({
 
   useEffect(() => {
     if (open) {
+      // Compute initial supplier selection for the item being edited
+      const initialSupplierIds = item
+        ? Object.entries(supplierItems)
+            .filter(([, itemIds]) => itemIds.includes(item.id))
+            .map(([sid]) => Number(sid))
+        : [];
+      setSelectedSupplierIds(initialSupplierIds);
+
       reset({
         name: item?.name ?? "",
         description: item?.description ?? "",
@@ -163,7 +183,7 @@ export default function ItemDetailsBottomSheet({
       minThreshold: data.minThreshold !== "" ? Number(data.minThreshold) : null,
       maxThreshold: data.maxThreshold !== "" ? Number(data.maxThreshold) : null,
     };
-    onSave(updatedItem);
+    onSave(updatedItem, selectedSupplierIds);
   };
 
   return (
@@ -175,6 +195,8 @@ export default function ItemDetailsBottomSheet({
       enablePanDownToClose={!isLoading}
       enableHandlePanningGesture={!isLoading}
       enableContentPanningGesture={false}
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
       backdropComponent={renderBackdrop}
       backgroundStyle={styles.sheetBackground}
       onChange={(index) => {
@@ -407,6 +429,23 @@ export default function ItemDetailsBottomSheet({
             </View>
           </View>
 
+          {/* Suppliers */}
+          <Text style={styles.sectionLabel}>Suppliers</Text>
+          <View style={styles.chipsRow}>
+            {suppliers.map((s) => (
+              <Chip
+                key={s.id}
+                selected={selectedSupplierIds.includes(s.id)}
+                onPress={() => toggleSupplier(s.id)}
+                showSelectedCheck
+                compact
+                style={styles.chip}
+              >
+                {s.name}
+              </Chip>
+            ))}
+          </View>
+
           {/* Thresholds — 2 columns */}
           <Text style={styles.sectionLabel}>Stock Thresholds</Text>
           <View style={styles.row}>
@@ -503,7 +542,7 @@ const useStyles = (colors: any) =>
     },
     contentContainer: {
       paddingHorizontal: 16,
-      paddingBottom: 32,
+      paddingBottom: 80,
     },
     input: {
       marginBottom: 16,
@@ -551,5 +590,14 @@ const useStyles = (colors: any) =>
     },
     cancelButton: {
       marginTop: 4,
+    },
+    chipsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 8,
+    },
+    chip: {
+      marginBottom: 0,
     },
   });

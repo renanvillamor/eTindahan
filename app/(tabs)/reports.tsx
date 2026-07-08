@@ -7,12 +7,28 @@ import { TouchableRipple } from "react-native-paper";
 
 const TILES = [
   {
+    id: "daily-summary",
+    label: "Daily Summary",
+    icon: "cash-register",
+    iconColor: "#0f766e",
+    iconBg: "#CCFBF1",
+    description: "Sales, expenses & net balance",
+  },
+  {
     id: "daily-inventory",
     label: "Daily Inventory",
     icon: "clipboard-list-outline",
     iconColor: "#2196F3",
     iconBg: "#E3F2FD",
     description: "Stock levels & adjustments",
+  },
+  {
+    id: "inventory-snapshot",
+    label: "Inventory Snapshot",
+    icon: "calendar-search",
+    iconColor: "#2563EB",
+    iconBg: "#DBEAFE",
+    description: "Stock on a selected date",
   },
   {
     id: "daily-sales",
@@ -54,13 +70,23 @@ const TILES = [
     iconBg: "#FEF3C7",
     description: "On hand vs actual quantity",
   },
+  {
+    id: "low-inventory",
+    label: "Low Inventory",
+    icon: "alert-circle-outline",
+    iconColor: "#ef4444",
+    iconBg: "#FEE2E2",
+    description: "Items at or below min threshold",
+  },
 ];
 
 export default function ReportsScreen() {
   const { showSnackbar } = useSnackbar();
   const today = format(new Date(), "MMMM d, yyyy");
 
-  const rows = [TILES.slice(0, 2), TILES.slice(2, 4), TILES.slice(4, 6)];
+  const rows = Array.from({ length: Math.ceil(TILES.length / 2) }, (_, i) =>
+    TILES.slice(i * 2, i * 2 + 2),
+  );
 
   return (
     <ScrollView className="flex-1 bg-gray-50" contentContainerClassName="pb-8">
@@ -77,6 +103,10 @@ export default function ReportsScreen() {
                   onPress={() => {
                     if (tile.id === "daily-inventory") {
                       router.push("/components/reports/daily-inventory");
+                    } else if (tile.id === "inventory-snapshot") {
+                      router.push(
+                        "/components/reports/inventory-snapshot" as any,
+                      );
                     } else if (tile.id === "daily-sales") {
                       router.push("/components/reports/daily-sales");
                     } else if (tile.id === "profit-report") {
@@ -93,6 +123,10 @@ export default function ReportsScreen() {
                       router.push(
                         "/components/reports/inventory-variance" as any,
                       );
+                    } else if (tile.id === "low-inventory") {
+                      router.push("/components/reports/low-inventory" as any);
+                    } else if (tile.id === "daily-summary") {
+                      router.push("/components/reports/daily-summary" as any);
                     } else {
                       showSnackbar(`${tile.label} — coming soon!`, "info");
                     }
@@ -124,6 +158,7 @@ export default function ReportsScreen() {
                 </TouchableRipple>
               </View>
             ))}
+            {row.length % 2 !== 0 && <View className="flex-1" />}
           </View>
         ))}
       </View>

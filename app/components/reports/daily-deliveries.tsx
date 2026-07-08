@@ -94,13 +94,15 @@ export default function DailyDeliveriesReport() {
       />
 
       <View className="flex-1 bg-white">
-        <DateSelector value={date} onChange={setDate} label="Delivery Date" />
+        <DateSelector value={date} onChange={setDate} />
 
         <SearchFilterBar
           placeholder="Search item or supplier..."
           sortOptions={SORT_OPTIONS}
+          showSupplierFilter
+          suppliers={suppliers}
         >
-          {(query, selectedType, sortKey, sortDir) => {
+          {(query, selectedType, selectedSupplierId, sortKey, sortDir) => {
             if (isLoading) {
               return (
                 <View className="flex-1 items-center justify-center py-16">
@@ -180,6 +182,7 @@ export default function DailyDeliveriesReport() {
               }, {}),
             ).map(([supplier, sectionData]) => ({
               supplier,
+              subtotal: sectionData.reduce((sum, d) => sum + d.total, 0),
               data: sectionData,
             }));
 
@@ -232,8 +235,11 @@ export default function DailyDeliveriesReport() {
                       size={14}
                       color="#6b7280"
                     />
-                    <Text style={styles.sectionHeaderText}>
+                    <Text style={[styles.sectionHeaderText, { flex: 1 }]}>
                       {section.supplier}
+                    </Text>
+                    <Text style={styles.sectionSubtotal}>
+                      {formatCurrency(section.subtotal)}
                     </Text>
                   </View>
                 )}
@@ -383,6 +389,12 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  sectionSubtotal: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#374151",
+    paddingRight: 4,
+  },
   dataValue: {
     fontSize: 13,
     fontWeight: "500",
@@ -390,7 +402,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   totalValue: {
-    fontWeight: "700",
+    fontWeight: "600",
   },
   unitLabel: {
     fontSize: 10,

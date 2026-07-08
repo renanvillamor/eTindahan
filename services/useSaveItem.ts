@@ -2,7 +2,12 @@ import { Item } from "@/models/Item";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabaseClient";
 
-async function saveItem(item: Item): Promise<Item> {
+type SaveItemInput = {
+  item: Item;
+  supplierIds: number[];
+};
+
+async function saveItem({ item, supplierIds }: SaveItemInput): Promise<Item> {
   const isNew = item.id === 0;
 
   const {
@@ -50,18 +55,23 @@ async function saveItem(item: Item): Promise<Item> {
     user_id: user.id,
   };
 
-  if (isNew) {
-    const { error } = await supabase.from("item_uom").insert(uomPayload);
-    if (error) throw new Error(error.message);
-  } else {
-    const { error: uomError } = await supabase
+  const { data: updatedUoms, error: uomUpdateError } = await supabase
+    .from("item_uom")
+    .update(uomPayload)
+    .eq("item_id", itemId)
+    .select("item_id");
+  if (uomUpdateError)
+    throw new Error(`item_uom update: ${uomUpdateError.message}`);
+
+  if (!updatedUoms || updatedUoms.length === 0) {
+    const { error: uomInsertError } = await supabase
       .from("item_uom")
-      .update(uomPayload)
-      .eq("item_id", itemId);
-    if (uomError) throw new Error(`item_uom update: ${uomError.message}`);
+      .insert(uomPayload);
+    if (uomInsertError)
+      throw new Error(`item_uom insert: ${uomInsertError.message}`);
   }
 
-  // Save price
+  // Save price — insert a new row only when prices have actually changed
   const pricePayload = {
     item_id: itemId,
     supplier_price: item.supplierPrice,
@@ -72,14 +82,55 @@ async function saveItem(item: Item): Promise<Item> {
   };
 
   if (isNew) {
-    const { error } = await supabase.from("price").insert(pricePayload);
-    if (error) throw new Error(error.message);
-  } else {
     const { error: priceError } = await supabase
       .from("price")
-      .update(pricePayload)
-      .eq("item_id", itemId);
-    if (priceError) throw new Error(`price update: ${priceError.message}`);
+      .insert(pricePayload);
+    if (priceError) throw new Error(`price insert: ${priceError.message}`);
+  } else {
+    const { data: latestPrice } = await supabase
+      .from("price")
+      .select("supplier_price, wholesale_price, retail_price")
+      .eq("item_id", itemId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    const pricesChanged =
+      !latestPrice ||
+      Number(latestPrice.supplier_price) !== item.supplierPrice ||
+      Number(latestPrice.wholesale_price) !== item.wholesalePrice ||
+      Number(latestPrice.retail_price) !== item.retailPrice;
+
+    if (pricesChanged) {
+      const { error: priceError } = await supabase
+        .from("price")
+        .insert(pricePayload);
+      if (priceError) throw new Error(`price insert: ${priceError.message}`);
+    }
+  }
+
+  // Sync supplier_item: delete existing rows then insert new ones
+  const { error: deleteSupplierItemError } = await supabase
+    .from("supplier_item")
+    .delete()
+    .eq("item_id", itemId);
+  if (deleteSupplierItemError)
+    throw new Error(`supplier_item delete: ${deleteSupplierItemError.message}`);
+
+  if (supplierIds.length > 0) {
+    const { error: insertSupplierItemError } = await supabase
+      .from("supplier_item")
+      .insert(
+        supplierIds.map((sid) => ({
+          supplier_id: sid,
+          item_id: itemId,
+          user_id: user.id,
+        })),
+      );
+    if (insertSupplierItemError)
+      throw new Error(
+        `supplier_item insert: ${insertSupplierItemError.message}`,
+      );
   }
 
   return { ...item, id: itemId };
@@ -92,6 +143,7 @@ export function useSaveItem() {
     mutationFn: saveItem,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["items"] });
+      queryClient.invalidateQueries({ queryKey: ["supplierItems"] });
     },
   });
 }

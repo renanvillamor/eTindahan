@@ -1,10 +1,16 @@
 import { NetworkProvider } from "@/lib/NetworkContext";
 import { SnackbarProvider } from "@/lib/SnackbarContext";
 import { useGetItemTypes } from "@/services/useGetItemTypes";
+import { useGetPaymentModes } from "@/services/useGetPaymentModes";
 import { useGetUom } from "@/services/useGetUom";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  MutationCache,
+  QueryCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -43,16 +49,39 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            refetchOnWindowFocus: false,
+  const [queryClient] = useState(() => {
+    const isAuthError = (error: unknown): boolean => {
+      const msg = (error as Error)?.message ?? "";
+      return (
+        msg.includes("JWT expired") ||
+        msg.includes("invalid JWT") ||
+        msg.includes("Invalid JWT") ||
+        msg.includes("not authenticated") ||
+        msg.includes("Invalid Refresh Token") ||
+        msg.includes("refresh_token_not_found")
+      );
+    };
+
+    const handleAuthError = (error: unknown) => {
+      if (isAuthError(error)) {
+        supabase.auth.signOut();
+      }
+    };
+
+    return new QueryClient({
+      queryCache: new QueryCache({ onError: handleAuthError }),
+      mutationCache: new MutationCache({ onError: handleAuthError }),
+      defaultOptions: {
+        queries: {
+          refetchOnWindowFocus: false,
+          retry: (failureCount, error) => {
+            if (isAuthError(error)) return false;
+            return failureCount < 2;
           },
         },
-      }),
-  );
+      },
+    });
+  });
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
@@ -88,6 +117,7 @@ function RootLayoutNav() {
   useGetUom();
   useGetSuppliers();
   useGetSupplierItems();
+  useGetPaymentModes();
 
   const appTheme = useAppTheme();
 

@@ -23,6 +23,19 @@ These are repo-wide rules for ALL Copilot Chat responses and code changes in thi
 - Avoid adding new inline `style={{...}}`.
 - If a numeric/dynamic value cannot be expressed via utilities, use a `StyleSheet` object (not inline style).
 
+## Date & Time Handling
+
+- MUST always save datetime values to the database as **UTC** using `new Date().toISOString()` (which produces a UTC ISO 8601 string).
+- MUST always **display** datetime values in the user's **local timezone** by parsing with `date-fns` (`parseISO`, `format`, etc.). Never display raw UTC strings directly.
+- When parsing timestamps returned from Supabase (which may lack a timezone suffix), treat them as UTC by appending `'Z'` before parsing if no offset is present:
+  ```ts
+  let iso = ts.replace(" ", "T");
+  if (!iso.endsWith("Z") && !/[+-]\d{2}:\d{2}$/.test(iso)) iso += "Z";
+  const dt = parseISO(iso);
+  ```
+- Use `date-fns` exclusively for all date formatting and arithmetic (`format`, `parseISO`, `isValid`, `startOfDay`, `endOfDay`, `addDays`, etc.). Do not use raw `Date` methods for display.
+- When filtering records by a local calendar day, convert the local day boundaries to UTC ISO strings before passing to Supabase range filters (`.gte` / `.lte`).
+
 ## When Unsure
 
 - If a requirement is ambiguous, ask 1–2 clarifying questions before implementing.

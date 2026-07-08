@@ -11,6 +11,7 @@ type Props = {
   supplierItems: Record<number, number[]>;
   onEdit: (item: Item) => void;
   onDelete: (itemId: number) => void;
+  onHistory: (item: Item) => void;
 };
 
 type CardProps = {
@@ -18,6 +19,7 @@ type CardProps = {
   index: number;
   onEdit: (item: Item) => void;
   onDelete: (itemId: number) => void;
+  onHistory: (item: Item) => void;
 };
 
 const ItemCard = memo(function ItemCard({
@@ -25,6 +27,7 @@ const ItemCard = memo(function ItemCard({
   index,
   onEdit,
   onDelete,
+  onHistory,
 }: CardProps) {
   const avatarBg = CARD_COLORS[index % CARD_COLORS.length];
   return (
@@ -38,6 +41,12 @@ const ItemCard = memo(function ItemCard({
             {item.name}
           </Text>
         </View>
+        <IconButton
+          icon="clock-time-four-outline"
+          size={20}
+          onPress={() => onHistory(item)}
+          style={styles.iconButton}
+        />
         <IconButton
           icon="pencil-outline"
           size={20}
@@ -128,6 +137,7 @@ function ItemList({
   supplierItems,
   onEdit,
   onDelete,
+  onHistory,
 }: Props) {
   if (items.length === 0) {
     return (
@@ -155,6 +165,7 @@ function ItemList({
           index={index}
           onEdit={onEdit}
           onDelete={onDelete}
+          onHistory={onHistory}
         />
       )}
     />

@@ -1,18 +1,27 @@
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { formatCurrency } from "@/lib/utils";
 import { Item } from "@/models/Item";
+import { PaymentMode } from "@/models/PaymentMode";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetScrollView,
 } from "@gorhom/bottom-sheet";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { Text as RNText, StyleSheet, View } from "react-native";
+import {
+  Text as RNText,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Button, Divider, List, Text } from "react-native-paper";
 
 type Props = {
   open: boolean;
   items: Item[];
   qtyByItemId: Record<number, number>;
+  paymentModes: PaymentMode[];
+  selectedModeId: number | null;
+  onModeChange: (id: number) => void;
   onPay: () => void;
   onDismiss?: () => void;
 };
@@ -21,6 +30,9 @@ export default function CheckoutBottomSheet({
   open,
   items,
   qtyByItemId,
+  paymentModes,
+  selectedModeId,
+  onModeChange,
   onPay,
   onDismiss,
 }: Props) {
@@ -36,7 +48,7 @@ export default function CheckoutBottomSheet({
     }
   }, [open]);
 
-  const snapPoints = useMemo(() => ["65%"], []);
+  const snapPoints = useMemo(() => ["75%"], []);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -112,6 +124,43 @@ export default function CheckoutBottomSheet({
 
         {/* Footer */}
         <Divider />
+        {paymentModes.length > 0 && (
+          <View style={styles.modeFooterSection}>
+            <Text style={styles.modeSectionLabel}>Payment Method</Text>
+            <View style={styles.modeChips}>
+              {paymentModes.map((m) => {
+                const isSelected = selectedModeId === m.id;
+                return (
+                  <TouchableOpacity
+                    key={m.id}
+                    activeOpacity={0.75}
+                    onPress={() => onModeChange(m.id)}
+                    style={[
+                      styles.modeChip,
+                      {
+                        backgroundColor: isSelected
+                          ? colors.primary
+                          : colors.secondary,
+                        borderColor: isSelected
+                          ? colors.primary
+                          : colors.outline,
+                      },
+                    ]}
+                  >
+                    <RNText
+                      style={[
+                        styles.modeChipText,
+                        { color: isSelected ? "#fff" : colors.onBackground },
+                      ]}
+                    >
+                      {m.mode}
+                    </RNText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
         <View style={styles.footer}>
           <View>
             <Text style={styles.totalLabel}>Total</Text>
@@ -163,6 +212,32 @@ const useStyles = (colors: any) =>
       fontSize: 15,
       fontWeight: "600",
       color: colors.onBackground,
+    },
+    modeFooterSection: {
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 4,
+    },
+    modeSectionLabel: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.onSurfaceVariant,
+      marginBottom: 8,
+    },
+    modeChips: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    modeChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 20,
+      borderWidth: 1,
+    },
+    modeChipText: {
+      fontSize: 13,
+      fontWeight: "600",
     },
     footer: {
       flexDirection: "row",

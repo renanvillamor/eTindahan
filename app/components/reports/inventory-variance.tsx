@@ -142,13 +142,13 @@ export default function InventoryVarianceReport() {
       />
 
       <View className="flex-1 bg-white">
-        <DateSelector value={date} onChange={setDate} label="Inventory Date" />
+        <DateSelector value={date} onChange={setDate} />
 
         <SearchFilterBar
           placeholder="Search items..."
           sortOptions={SORT_OPTIONS}
         >
-          {(query, selectedType, sortKey, sortDir) => {
+          {(query, selectedType, selectedSupplierId, sortKey, sortDir) => {
             if (isLoading) {
               return (
                 <View className="flex-1 items-center justify-center py-16">
@@ -171,14 +171,18 @@ export default function InventoryVarianceReport() {
               };
             });
 
-            // Filter
-            tableItems = tableItems.filter((row) => {
-              const q = query.trim().toLowerCase();
-              return (
-                (!q || row.itemName.toLowerCase().includes(q)) &&
-                (!selectedType || row.typeId === selectedType)
-              );
-            });
+// Filter
+             tableItems = tableItems.filter((row) => {
+               const q = query.trim().toLowerCase();
+               const matchesSupplier =
+                 !selectedSupplierId ||
+                 (itemSupplierMap[row.itemId] ?? []).includes(selectedSupplierId);
+               return (
+                 (!q || row.itemName.toLowerCase().includes(q)) &&
+                 (!selectedType || row.typeId === selectedType) &&
+                 matchesSupplier
+               );
+             });
 
             // Sort
             if (sortKey) {

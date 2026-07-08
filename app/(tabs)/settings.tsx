@@ -1,6 +1,7 @@
 import { useSnackbar } from "@/lib/SnackbarContext";
 import useSafePush from "@/lib/useSafePush";
-import { useSaveSale } from "@/services/useSaveSale";
+import { syncPendingDeletions } from "@/services/useDeleteSale";
+import { InvalidUnsyncedSalesError, useSaveSale } from "@/services/useSaveSale";
 import { useStore } from "@/store/useStore";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 // import * as Updates from "expo-updates";
@@ -8,8 +9,11 @@ import { useMemo, useState } from "react";
 import { Text as RNText, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
+  Button,
   Card,
+  Dialog,
   Icon,
+  Portal,
   TouchableRipple,
 } from "react-native-paper";
 
@@ -84,43 +88,89 @@ function SettingsTile({
   );
 }
 
+type InvalidSalesCleanupState = {
+  saleIds: number[];
+  itemNames: string[];
+};
+
 export default function SettingsScreen() {
   const safePush = useSafePush();
   const queryClient = useQueryClient();
   const isFetching = useIsFetching();
   const { showSnackbar } = useSnackbar();
-  const { mutateAsync: saveSales, isPending: isSyncing } = useSaveSale();
+  const { mutateAsync: saveSales } = useSaveSale();
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [invalidCleanupState, setInvalidCleanupState] =
+    useState<InvalidSalesCleanupState | null>(null);
   const salesToday = useStore((s) => s.salesToday);
   const clearUnsyncedSales = useStore((s) => s.clearUnsyncedSales);
+  const clearDeletedSales = useStore((s) => s.clearDeletedSales);
+  const removeSalesByIds = useStore((s) => s.removeSalesByIds);
 
   const unsyncedSales = useMemo(
     () => salesToday.filter((s) => s.synced === false),
     [salesToday],
   );
 
+  const pendingDeleteSales = useMemo(
+    () => salesToday.filter((s) => s.pendingDelete === true && s.id > 0),
+    [salesToday],
+  );
+
+  const handleInvalidSalesCleanup = () => {
+    if (!invalidCleanupState) return;
+
+    removeSalesByIds(invalidCleanupState.saleIds);
+    showSnackbar(
+      `Removed ${invalidCleanupState.saleIds.length} invalid local sale${
+        invalidCleanupState.saleIds.length === 1 ? "" : "s"
+      }. Sync again to continue.`,
+      "success",
+    );
+    setInvalidCleanupState(null);
+  };
+
   const handleSync = async () => {
-    if (unsyncedSales.length === 0) {
+    if (unsyncedSales.length === 0 && pendingDeleteSales.length === 0) {
       showSnackbar("No unsynced data to sync.", "info");
       return;
     }
+    setIsSyncing(true);
     try {
-      await saveSales(unsyncedSales);
-      clearUnsyncedSales();
-      queryClient.invalidateQueries({ queryKey: ["salesToday"] });
+      if (unsyncedSales.length > 0) {
+        await saveSales(unsyncedSales);
+        clearUnsyncedSales();
+      }
+      if (pendingDeleteSales.length > 0) {
+        await syncPendingDeletions(pendingDeleteSales.map((s) => s.id));
+        clearDeletedSales();
+      }
+      queryClient.invalidateQueries({
+        queryKey: ["salesToday"],
+        exact: false,
+      });
       showSnackbar("Data synced successfully!", "success");
     } catch (e: any) {
+      if (e instanceof InvalidUnsyncedSalesError) {
+        setInvalidCleanupState({
+          saleIds: e.invalidSaleIds,
+          itemNames: e.invalidItemNames,
+        });
+      }
       showSnackbar(e?.message ?? "An error occurred", "error");
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["salesToday"] });
     queryClient.invalidateQueries({ queryKey: ["items"] });
     queryClient.invalidateQueries({ queryKey: ["itemTypes"] });
     queryClient.invalidateQueries({ queryKey: ["uoms"] });
     queryClient.invalidateQueries({ queryKey: ["suppliers"] });
     queryClient.invalidateQueries({ queryKey: ["deliveries"] });
     queryClient.invalidateQueries({ queryKey: ["inventories"] });
+    queryClient.invalidateQueries({ queryKey: ["paymentModes"] });
   };
 
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -159,102 +209,140 @@ export default function SettingsScreen() {
   // };
 
   return (
-    <ScrollView
-      className="flex-1 bg-gray-50 pt-4"
-      contentContainerClassName="px-4 pt-14 pb-8 gap-3"
-      showsVerticalScrollIndicator={false}
-    >
-      <View className="flex-row gap-3">
-        <SettingsTile
-          icon="package-variant"
-          label="Items"
-          subtitle="Manage your product catalog"
-          accentColor="#4CAF50"
-          onPress={() => safePush("/components/settings/item/items")}
-        />
-        <SettingsTile
-          icon="shape"
-          label="Item Types"
-          subtitle="Organise items by category"
-          accentColor="#2196F3"
-          onPress={() => safePush("/components/settings/itemType/item-types")}
-        />
-      </View>
+    <>
+      <ScrollView
+        className="flex-1 bg-gray-50 pt-4"
+        contentContainerClassName="px-4 pt-14 pb-8 gap-3"
+        showsVerticalScrollIndicator={false}
+      >
+        <View className="flex-row gap-3">
+          <SettingsTile
+            icon="package-variant"
+            label="Items"
+            subtitle="Manage your product catalog"
+            accentColor="#4CAF50"
+            onPress={() => safePush("/components/settings/item/items")}
+          />
+          <SettingsTile
+            icon="shape"
+            label="Item Types"
+            subtitle="Organise items by category"
+            accentColor="#2196F3"
+            onPress={() => safePush("/components/settings/itemType/item-types")}
+          />
+        </View>
 
-      <View className="flex-row gap-3">
-        <SettingsTile
-          icon="truck-delivery"
-          label="Suppliers"
-          subtitle="Manage your suppliers"
-          accentColor="#FF9800"
-          onPress={() => safePush("/components/settings/supplier/suppliers")}
-        />
-        <SettingsTile
-          icon="weight-kilogram"
-          label="UOM"
-          subtitle="Units of measurement"
-          accentColor="#9C27B0"
-          onPress={() => safePush("/components/settings/uom/uom")}
-        />
-      </View>
+        <View className="flex-row gap-3">
+          <SettingsTile
+            icon="truck-delivery"
+            label="Suppliers"
+            subtitle="Manage your suppliers"
+            accentColor="#FF9800"
+            onPress={() => safePush("/components/settings/supplier/suppliers")}
+          />
+          <SettingsTile
+            icon="weight-kilogram"
+            label="UOM"
+            subtitle="Units of measurement"
+            accentColor="#9C27B0"
+            onPress={() => safePush("/components/settings/uom/uom")}
+          />
+        </View>
 
-      <View className="flex-row gap-3">
-        <SettingsTile
-          icon="cloud-sync-outline"
-          label="Sync Data"
-          subtitle="Upload offline sales to server"
-          accentColor="#00BCD4"
-          onPress={handleSync}
-          loading={isSyncing}
-          disabled={isSyncing}
-          badge={
-            unsyncedSales.length > 0
-              ? `${unsyncedSales.length} pending`
-              : undefined
-          }
-          badgeVariant="error"
-        />
-        <SettingsTile
-          icon="refresh"
-          label="Refresh Data"
-          subtitle="Re-fetch all data from server"
-          accentColor="#3F51B5"
-          onPress={handleRefresh}
-          loading={isFetching > 0}
-          disabled={isFetching > 0}
-        />
-      </View>
+        <View className="flex-row gap-3">
+          <SettingsTile
+            icon="credit-card-outline"
+            label="Mode of Payment"
+            subtitle="Manage payment methods"
+            accentColor="#009688"
+            onPress={() =>
+              safePush("/components/settings/payment-mode/payment-modes")
+            }
+          />
+          <View className="flex-1" />
+        </View>
 
-      <View className="flex-row gap-3">
-        <SettingsTile
-          icon="cog-outline"
-          label="App Settings"
-          subtitle="Preferences and configuration"
-          accentColor="#607D8B"
-          onPress={() => safePush("/components/settings/app-settings")}
-        />
-        <SettingsTile
-          icon="account-circle-outline"
-          label="Account"
-          subtitle="Profile and authentication"
-          accentColor="#E91E63"
-          onPress={() => safePush("/components/settings/account")}
-        />
-      </View>
+        <View className="flex-row gap-3">
+          <SettingsTile
+            icon="cloud-sync-outline"
+            label="Sync Data"
+            subtitle="Upload offline sales to server"
+            accentColor="#00BCD4"
+            onPress={handleSync}
+            loading={isSyncing}
+            disabled={isSyncing}
+            badge={
+              unsyncedSales.length + pendingDeleteSales.length > 0
+                ? `${unsyncedSales.length + pendingDeleteSales.length} pending`
+                : undefined
+            }
+            badgeVariant="error"
+          />
+          <SettingsTile
+            icon="refresh"
+            label="Refresh Data"
+            subtitle="Re-fetch all data from server"
+            accentColor="#3F51B5"
+            onPress={handleRefresh}
+            loading={isFetching > 0}
+            disabled={isFetching > 0}
+          />
+        </View>
 
-      {/* <View className="flex-row gap-3">
-        <SettingsTile
-          icon="cellphone-arrow-down"
-          label="App Update"
-          subtitle="Check and install latest version"
-          accentColor="#009688"
-          onPress={handleCheckUpdate}
-          loading={isCheckingUpdate}
-          disabled={isCheckingUpdate}
-        />
-        <View className="flex-1" />
-      </View> */}
-    </ScrollView>
+        <View className="flex-row gap-3">
+          <SettingsTile
+            icon="cog-outline"
+            label="App Settings"
+            subtitle="Preferences and configuration"
+            accentColor="#607D8B"
+            onPress={() => safePush("/components/settings/app-settings")}
+          />
+          <SettingsTile
+            icon="account-circle-outline"
+            label="Account"
+            subtitle="Profile and authentication"
+            accentColor="#E91E63"
+            onPress={() => safePush("/components/settings/account")}
+          />
+        </View>
+
+        {/* <View className="flex-row gap-3">
+          <SettingsTile
+            icon="cellphone-arrow-down"
+            label="App Update"
+            subtitle="Check and install latest version"
+            accentColor="#009688"
+            onPress={handleCheckUpdate}
+            loading={isCheckingUpdate}
+            disabled={isCheckingUpdate}
+          />
+          <View className="flex-1" />
+        </View> */}
+      </ScrollView>
+
+      <Portal>
+        <Dialog
+          visible={invalidCleanupState !== null}
+          onDismiss={() => setInvalidCleanupState(null)}
+        >
+          <Dialog.Title>Remove Invalid Local Sales</Dialog.Title>
+          <Dialog.Content>
+            <RNText className="text-sm text-gray-700 leading-5">
+              These local sales cannot be synced because their items no longer
+              exist: {invalidCleanupState?.itemNames.join(", ") || ""}.
+            </RNText>
+            <RNText className="text-sm text-gray-700 leading-5 mt-3">
+              Remove only these invalid local sales and keep your other pending
+              sales untouched.
+            </RNText>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setInvalidCleanupState(null)}>Cancel</Button>
+            <Button onPress={handleInvalidSalesCleanup}>Remove</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </>
   );
 }
 

@@ -25,9 +25,14 @@ export default function DeliveryScreen() {
 
     const toDate = (ts?: string | null) => {
       if (!ts) return null;
-      const iso = String(ts)
-        .replace(" ", "T")
-        .replace(/\+(\d{2})$/, "+$1:00");
+      let iso = String(ts).replace(" ", "T");
+      // Normalise short UTC offset: +08 → +08:00
+      iso = iso.replace(/\+(\d{2})$/, "+$1:00");
+      // If there is still no timezone info, treat the stored value as UTC
+      // (saves are done via new Date().toISOString() which is always UTC)
+      if (!iso.endsWith("Z") && !/[+-]\d{2}:\d{2}$/.test(iso)) {
+        iso += "Z";
+      }
       const dt = parseISO(iso);
       return isValid(dt) ? dt : null;
     };
@@ -37,59 +42,56 @@ export default function DeliveryScreen() {
       return dt ? format(dt, "yyyy-MM-dd") : ts ? String(ts).slice(0, 10) : "";
     };
 
-    const byDate = groupBy(list, (d) => dayKey(d.transactionDate));
-    const dateKeys = orderBy(Object.keys(byDate), [(k) => k], ["desc"]);
+    const byBatch = groupBy(list, (d) => d.deliveryId);
+    const batchKeys = orderBy(
+      Object.keys(byBatch),
+      [(k) => byBatch[k]?.[0]?.transactionDate ?? ""],
+      ["desc"],
+    );
 
-    return dateKeys.map((dateKey) => {
-      const rows = byDate[dateKey] ?? [];
-
-      const byDatetimeSupplier = groupBy(rows, (d) => {
-        const dt = toDate(d.transactionDate);
-        const datetimeKey = dt
-          ? format(dt, "yyyy-MM-dd'T'HH:mm:ss")
-          : String(d.transactionDate ?? "");
-        const supplierKey = String(d.supplierId ?? d.supplierName ?? "unknown");
-        return `${datetimeKey}|${supplierKey}`;
-      });
-
-      const groups: DeliveryGroupItem[] = Object.keys(byDatetimeSupplier).map(
-        (groupKey) => {
-          const items = byDatetimeSupplier[groupKey] ?? [];
-          const supplierName = items[0]?.supplierName ?? "";
-          const supplierId = items[0]?.supplierId ?? null;
-
-          return {
-            key: `${dateKey}|${groupKey}`,
-            supplierId,
-            supplierName,
-            total: items.reduce((sum, d) => sum + Number(d.total ?? 0), 0),
-            status: "PAID",
-            items: items.map((d) => ({
-              id: d.id,
-              itemName: d.itemName ?? "",
-              quantity: Number(d.quantity ?? 0),
-              unitName: d.uom ?? "",
-              price: Number(d.price ?? 0),
-              total: Number(d.total ?? 0),
-            })),
-          };
-        },
-      );
-
-      const data = orderBy(
-        groups,
-        [(g) => g.supplierName?.toLowerCase?.() ?? ""],
-        ["asc"],
-      );
+    const allGroups: DeliveryGroupItem[] = batchKeys.map((batchKey) => {
+      const items = byBatch[batchKey] ?? [];
+      const first = items[0];
+      const dateKey = dayKey(first?.transactionDate);
 
       return {
-        key: dateKey,
+        key: batchKey,
+        deliveryId: first?.deliveryId ?? 0,
+        supplierId: first?.supplierId ?? null,
+        supplierName: first?.supplierName ?? "",
+        total: items.reduce((sum, d) => sum + Number(d.total ?? 0), 0),
+        isPaid: first?.isPaid ?? true,
+        payments: first?.payments ?? [],
+        items: items.map((d) => ({
+          id: d.id,
+          itemName: d.itemName ?? "",
+          quantity: Number(d.quantity ?? 0),
+          unitName: d.uom ?? "",
+          price: Number(d.price ?? 0),
+          total: Number(d.total ?? 0),
+        })),
+        _dateKey: dateKey,
+      };
+    }) as any[];
+
+    // Re-group into date sections
+    const byDate = groupBy(allGroups, (g: any) => g._dateKey);
+    const dateKeys = orderBy(Object.keys(byDate), [(k) => k], ["desc"]);
+
+    return dateKeys.map((dk) => {
+      const data = orderBy(
+        byDate[dk] ?? [],
+        [(g: DeliveryGroupItem) => g.supplierName?.toLowerCase?.() ?? ""],
+        ["asc"],
+      );
+      return {
+        key: dk,
         title: (() => {
           try {
-            const dt = parseISO(dateKey);
-            return isValid(dt) ? format(dt, "MMM d, yyyy") : String(dateKey);
+            const dt = parseISO(dk);
+            return isValid(dt) ? format(dt, "MMM d, yyyy") : String(dk);
           } catch {
-            return String(dateKey);
+            return String(dk);
           }
         })(),
         data,
@@ -121,91 +123,120 @@ export default function DeliveryScreen() {
       />
 
       <View className="flex-1 bg-white p-4">
-        {deliveries && deliveries.length > 0 ? (
-          <SectionList
-            style={{ flex: 1 }}
-            sections={sections}
-            keyExtractor={(item) => item.key}
-            stickySectionHeadersEnabled={false}
-            refreshControl={
-              <RefreshControl refreshing={isFetching} onRefresh={refetch} />
-            }
-            renderSectionHeader={({ section }) => (
-              <Text className="text-lg text-base font-semibold text-gray-600 mt-4 mb-1 bg-gray-100 p-2">
-                {section.title}
+        <SectionList
+          style={{ flex: 1 }}
+          sections={sections}
+          keyExtractor={(item) => item.key}
+          stickySectionHeadersEnabled={false}
+          refreshControl={
+            <RefreshControl refreshing={isFetching} onRefresh={refetch} />
+          }
+          ListEmptyComponent={
+            <View className="flex-1 justify-center items-center mt-24">
+              <Text className="text-gray-500">No deliveries today</Text>
+              <Text className="text-gray-400 text-xs mt-1">
+                Pull down to refresh
               </Text>
-            )}
-            ItemSeparatorComponent={() => <View className="h-px bg-gray-200" />}
-            renderItem={({ item }) => {
-              return (
-                <List.Accordion
-                  title={item.supplierName}
-                  right={(props) => (
-                    <View className="flex-row justify-center items-end mr-2">
-                      <Text className="font-semibold" numberOfLines={1}>
-                        {formatCurrency(item.total)}
-                      </Text>
+            </View>
+          }
+          renderSectionHeader={({ section }) => (
+            <Text className="text-lg text-base font-semibold text-gray-600 mt-4 mb-1 bg-gray-100 p-2">
+              {section.title}
+            </Text>
+          )}
+          ItemSeparatorComponent={() => <View className="h-px bg-gray-200" />}
+          renderItem={({ item }) => {
+            return (
+              <List.Accordion
+                title={item.supplierName}
+                right={(props) => (
+                  <View className="flex-row justify-center items-end">
+                    <Text
+                      className="text-sm w-16"
+                      style={{ color: item.isPaid ? "#16a34a" : "#ef4444" }}
+                      numberOfLines={1}
+                    >
+                      {item.isPaid ? "PAID" : "UNPAID"}
+                    </Text>
+                    <Text className="font-semibold" numberOfLines={1}>
+                      {formatCurrency(item.total)}
+                    </Text>
+                  </View>
+                )}
+                id={item.key}
+              >
+                <View className="pt-2 pl-4 pr-6 pb-3 bg-gray-50">
+                  {item.items.map((line) => (
+                    <View key={line.id} className="flex-row items-center py-1">
                       <Text
-                        className="text-sm text-gray-500 w-10 text-right ml-2"
+                        className="text-sm text-gray-700 flex-1 pr-3"
                         numberOfLines={1}
+                        ellipsizeMode="tail"
                       >
-                        {item.status}
+                        {line.itemName}
+                      </Text>
+
+                      <Text
+                        className="text-sm text-gray-700 w-16"
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {`${line.quantity} ${
+                          line.unitName ? line.unitName + "/s" : ""
+                        }`}
+                      </Text>
+
+                      <Text
+                        className="text-sm text-gray-700 w-20 text-right"
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {formatCurrency(line.price)}
+                      </Text>
+
+                      <Text
+                        className="text-sm text-gray-700 w-20 text-right"
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {formatCurrency(line.total)}
                       </Text>
                     </View>
+                  ))}
+
+                  {item.payments && item.payments.length > 0 && (
+                    <View className="mt-3 pt-2 border-t border-gray-200">
+                      <Text className="text-xs font-semibold text-gray-500 mb-1">
+                        PAYMENT METHODS
+                      </Text>
+                      {item.payments.map((p) => (
+                        <View
+                          key={p.id}
+                          className="flex-row justify-between items-start py-0.5"
+                        >
+                          <View className="flex-1 pr-3">
+                            <Text className="text-sm text-gray-600">
+                              {p.paymentModeName ?? "Unknown"}
+                              {p.sourceTypeDescription
+                                ? ` - ${p.sourceTypeDescription}`
+                                : ""}
+                              {p.sourceDate
+                                ? ` (${format(parseISO(p.sourceDate.slice(0, 10)), "MM/dd/yyyy")})`
+                                : ""}
+                            </Text>
+                          </View>
+                          <Text className="text-sm font-medium text-gray-700">
+                            {formatCurrency(p.amount)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
                   )}
-                  id={item.key}
-                >
-                  <View className="pt-2 pl-4 pr-6 pb-3 bg-gray-50">
-                    {item.items.map((line) => (
-                      <View
-                        key={line.id}
-                        className="flex-row items-center py-1"
-                      >
-                        <Text
-                          className="text-sm text-gray-700 flex-1 pr-3"
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {line.itemName}
-                        </Text>
-
-                        <Text
-                          className="text-sm text-gray-700 w-16"
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {`${line.quantity} ${
-                            line.unitName ? line.unitName + "/s" : ""
-                          }`}
-                        </Text>
-
-                        <Text
-                          className="text-sm text-gray-700 w-20 text-right"
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {formatCurrency(line.price)}
-                        </Text>
-
-                        <Text
-                          className="text-sm text-gray-700 w-20 text-right"
-                          numberOfLines={1}
-                          ellipsizeMode="tail"
-                        >
-                          {formatCurrency(line.total)}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                </List.Accordion>
-              );
-            }}
-          />
-        ) : (
-          <View className="flex-1 justify-center items-center">
-            <Text className="text-gray-500">No deliveries today</Text>
-          </View>
-        )}
+                </View>
+              </List.Accordion>
+            );
+          }}
+        />
       </View>
 
       <View className="absolute bottom-12 left-0 right-0 px-4">

@@ -117,7 +117,7 @@ export default function DailySalesReport() {
           placeholder="Search items..."
           sortOptions={SORT_OPTIONS}
         >
-          {(query, selectedType, sortKey, sortDir) => {
+          {(query, selectedType, selectedSupplierId, sortKey, sortDir) => {
             if (isLoading) {
               return (
                 <View className="flex-1 items-center justify-center py-16">

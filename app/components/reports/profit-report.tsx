@@ -52,7 +52,7 @@ export default function ProfitReport() {
           placeholder="Search items..."
           sortOptions={SORT_OPTIONS}
         >
-          {(query, selectedType, sortKey, sortDir) => {
+          {(query, selectedType, selectedSupplierId, sortKey, sortDir) => {
             let rows = profitRows.filter((it) => {
               const q = query.trim().toLowerCase();
               return (

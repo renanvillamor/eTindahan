@@ -23,7 +23,19 @@ export default function CartScreen() {
   const { showSnackbar } = useSnackbar();
   const items = useStore((s) => s.items);
   const addSalesToday = useStore((s) => s.addSalesToday);
+  const paymentModes = useStore((s) => s.paymentModes);
   const [qtyByItemId, setQtyByItemId] = useState<Record<number, number>>({});
+
+  const defaultModeId = useMemo(
+    () =>
+      paymentModes.find((m) => m.isDefault)?.id ?? paymentModes[0]?.id ?? null,
+    [paymentModes],
+  );
+
+  const [selectedModeId, setSelectedModeId] = useState<number | null>(null);
+
+  // Sync selectedModeId to default whenever paymentModes list changes
+  const resolvedModeId = selectedModeId ?? defaultModeId;
 
   const activeItems = useMemo(() => items.filter((it) => it.isActive), [items]);
 
@@ -46,6 +58,8 @@ export default function CartScreen() {
 
   const handlePay = useCallback(() => {
     const now = new Date().toISOString();
+    const chosenMode =
+      paymentModes.find((m) => m.id === resolvedModeId) ?? null;
     const newSales: SaleToday[] = items
       .filter((it) => (qtyByItemId[it.id] ?? 0) > 0)
       .map((it, i) => {
@@ -64,13 +78,23 @@ export default function CartScreen() {
           total: it.retailPrice * qty,
           createdBy: null,
           synced: false,
+          paymentModeId: chosenMode?.id ?? null,
+          paymentMode: chosenMode?.mode ?? null,
         };
       });
     addSalesToday(newSales);
     setQtyByItemId({});
+    setSelectedModeId(null);
     setCheckoutOpen(false);
     showSnackbar("Payment recorded successfully!", "success");
-  }, [items, qtyByItemId, addSalesToday, showSnackbar]);
+  }, [
+    items,
+    qtyByItemId,
+    paymentModes,
+    resolvedModeId,
+    addSalesToday,
+    showSnackbar,
+  ]);
 
   const setQty = useCallback((itemId: number, value: number) => {
     const clamped = Math.max(0, value);
@@ -155,7 +179,7 @@ export default function CartScreen() {
         <RNText className="text-2xl font-bold text-gray-800">My Cart</RNText>
       </View>
       <SearchFilterBar placeholder="Search items">
-        {(query, selectedType, sortKey, sortDir) => {
+        {(query, selectedType, selectedSupplierId, sortKey, sortDir) => {
           let filtered = activeItems.filter((it) => {
             const q = query.trim().toLowerCase();
             return (
@@ -240,6 +264,9 @@ export default function CartScreen() {
         open={checkoutOpen}
         items={items}
         qtyByItemId={qtyByItemId}
+        paymentModes={paymentModes}
+        selectedModeId={resolvedModeId}
+        onModeChange={setSelectedModeId}
         onPay={handlePay}
         onDismiss={() => setCheckoutOpen(false)}
       />

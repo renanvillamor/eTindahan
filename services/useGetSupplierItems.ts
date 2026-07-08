@@ -27,7 +27,6 @@ export function useGetSupplierItems() {
   const result = useQuery<Record<number, number[]>, Error>({
     queryKey: ["supplierItems"],
     queryFn: fetchSupplierItems,
-    staleTime: Infinity,
   });
 
   useEffect(() => {

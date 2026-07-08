@@ -2,6 +2,7 @@ import { Delivery } from "@/models/Delivery";
 import { Inventory } from "@/models/Inventory";
 import { Item } from "@/models/Item";
 import { ItemType } from "@/models/ItemType";
+import { PaymentMode } from "@/models/PaymentMode";
 import { SaleToday } from "@/models/SaleToday";
 import { Supplier } from "@/models/Supplier";
 import { Uom } from "@/models/Uom";
@@ -17,6 +18,7 @@ type StoreState = {
   deliveries: Delivery[];
   suppliers: Supplier[];
   uoms: Uom[];
+  paymentModes: PaymentMode[];
   salesToday: SaleToday[];
   supplierItems: Record<number, number[]>;
   setItems: (items: Item[]) => void;
@@ -25,8 +27,15 @@ type StoreState = {
   setDeliveries: (deliveries: Delivery[]) => void;
   setSuppliers: (suppliers: Supplier[]) => void;
   setUoms: (uoms: Uom[]) => void;
+  setPaymentModes: (modes: PaymentMode[]) => void;
+  updatePaymentMode: (mode: PaymentMode) => void;
+  removePaymentMode: (id: number) => void;
   setSalesToday: (dbSales: SaleToday[]) => void;
   addSalesToday: (sales: SaleToday[]) => void;
+  removeSalesByIds: (saleIds: number[]) => void;
+  markSaleForDeletion: (saleId: number) => void;
+  undoSaleDeletion: (saleId: number) => void;
+  clearDeletedSales: () => void;
   clearUnsyncedSales: () => void;
   setSupplierItems: (map: Record<number, number[]>) => void;
   updateItem: (item: Item) => void;
@@ -48,6 +57,7 @@ export const useStore = create<StoreState>()(
       deliveries: [],
       suppliers: [],
       uoms: [],
+      paymentModes: [],
       salesToday: [],
       supplierItems: {},
       setItems: (items) => {
@@ -80,16 +90,42 @@ export const useStore = create<StoreState>()(
           state.uoms = uoms;
         });
       },
+      setPaymentModes: (modes) => {
+        set((state) => {
+          state.paymentModes = modes;
+        });
+      },
+      updatePaymentMode: (mode) => {
+        set((state) => {
+          const index = state.paymentModes.findIndex((m) => m.id === mode.id);
+          if (index !== -1) {
+            state.paymentModes[index] = mode;
+          } else {
+            state.paymentModes.push(mode);
+          }
+        });
+      },
+      removePaymentMode: (id) => {
+        set((state) => {
+          state.paymentModes = state.paymentModes.filter((m) => m.id !== id);
+        });
+      },
       setSalesToday: (dbSales) => {
         set((state) => {
-          const today = new Date().toISOString().slice(0, 10);
           const unsynced = state.salesToday
-            .filter(
-              (s) => s.synced === false && s.transactionDate.startsWith(today),
-            )
+            .filter((s) => s.synced === false)
             .map((s) => ({ ...s }));
+          const pendingDeleteIds = new Set(
+            state.salesToday
+              .filter((s) => s.pendingDelete === true)
+              .map((s) => s.id),
+          );
           state.salesToday = [
-            ...dbSales.map((s) => ({ ...s, synced: true as boolean })),
+            ...dbSales.map((s) => ({
+              ...s,
+              synced: true as boolean,
+              ...(pendingDeleteIds.has(s.id) ? { pendingDelete: true } : {}),
+            })),
             ...unsynced,
           ];
         });
@@ -99,9 +135,39 @@ export const useStore = create<StoreState>()(
           state.salesToday = [...newSales, ...state.salesToday];
         });
       },
+      removeSalesByIds: (saleIds) => {
+        set((state) => {
+          const idsToRemove = new Set(saleIds);
+          state.salesToday = state.salesToday.filter(
+            (sale) => !idsToRemove.has(sale.id),
+          );
+        });
+      },
       clearUnsyncedSales: () => {
         set((state) => {
           state.salesToday = state.salesToday.filter((s) => s.synced !== false);
+        });
+      },
+      markSaleForDeletion: (saleId) => {
+        set((state) => {
+          if (saleId < 0) {
+            // Never persisted to DB — remove immediately
+            state.salesToday = state.salesToday.filter((s) => s.id !== saleId);
+          } else {
+            const idx = state.salesToday.findIndex((s) => s.id === saleId);
+            if (idx !== -1) state.salesToday[idx].pendingDelete = true;
+          }
+        });
+      },
+      undoSaleDeletion: (saleId) => {
+        set((state) => {
+          const idx = state.salesToday.findIndex((s) => s.id === saleId);
+          if (idx !== -1) delete state.salesToday[idx].pendingDelete;
+        });
+      },
+      clearDeletedSales: () => {
+        set((state) => {
+          state.salesToday = state.salesToday.filter((s) => !s.pendingDelete);
         });
       },
       setSupplierItems: (map) => {

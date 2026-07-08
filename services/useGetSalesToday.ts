@@ -1,15 +1,18 @@
 import { SaleToday } from "@/models/SaleToday";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { endOfDay, format, startOfDay } from "date-fns";
 import { supabase } from "../lib/supabaseClient";
 
 async function fetchSalesToday(): Promise<SaleToday[]> {
-  const today = format(new Date(), "yyyy-MM-dd");
+  const now = new Date();
+  const start = startOfDay(now).toISOString();
+  const end = endOfDay(now).toISOString();
+
   const { data, error } = await supabase
     .from("vw_sales")
     .select("*")
-    .gte("transaction_date", today)
-    .lte("transaction_date", today + "T23:59:59")
+    .gte("transaction_date", start)
+    .lte("transaction_date", end)
     .order("transaction_date", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -28,6 +31,9 @@ async function fetchSalesToday(): Promise<SaleToday[]> {
     price: Number(row.price ?? 0),
     total: Number(row.total ?? 0),
     createdBy: row.created_by ?? null,
+    paymentModeId:
+      row.payment_mode_id != null ? Number(row.payment_mode_id) : null,
+    paymentMode: row.payment_mode ?? null,
   }));
 }
 
@@ -35,7 +41,6 @@ export function useGetSalesToday() {
   return useQuery<SaleToday[], Error>({
     queryKey: ["salesToday", format(new Date(), "yyyy-MM-dd")],
     queryFn: fetchSalesToday,
-    staleTime: Infinity,
-    enabled: false,
+    refetchOnWindowFocus: false,
   });
 }

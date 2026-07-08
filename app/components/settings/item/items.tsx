@@ -11,10 +11,12 @@ import ConfirmDialog from "../../shared/ConfirmDialog";
 import SearchFilterBar from "../../shared/SearchFilterBar";
 import ItemDetailsBottomSheet from "./ItemDetailsBottomSheet";
 import ItemList from "./ItemList";
+import ItemPriceHistorySheet from "./ItemPriceHistorySheet";
 
 export default function ItemsScreen() {
   const { showSnackbar } = useSnackbar();
   const items = useStore((s) => s.items) ?? [];
+  const salesToday = useStore((s) => s.salesToday) ?? [];
   const suppliers = useStore((s) => s.suppliers) ?? [];
   const supplierItems = useStore((s) => s.supplierItems) ?? {};
   const updateItem = useStore((s) => s.updateItem);
@@ -33,10 +35,15 @@ export default function ItemsScreen() {
   }, [supplierItems]);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [deletingItemId, setDeletingItemId] = useState<number | null>(null);
+  const [historyItem, setHistoryItem] = useState<Item | null>(null);
   const [isAddMode, setIsAddMode] = useState(false);
 
   const saveMutation = useSaveItem();
   const deleteMutation = useDeleteItem();
+
+  const handleHistory = (item: Item) => {
+    setHistoryItem(item);
+  };
 
   const handleAdd = () => {
     setIsAddMode(true);
@@ -48,14 +55,16 @@ export default function ItemsScreen() {
       typeId: null,
       isActive: true,
       supplierPrice: 0,
+      supplierUnitPrice: 0,
       wholesalePrice: 0,
       retailPrice: 0,
-      defaultUom: "",
-      defaultUomId: 0,
-      deliveryUom: "",
-      deliveryUomId: 0,
-      saleUom: "",
-      saleUomId: 0,
+      packUom: "",
+      packUomId: 0,
+      packSize: null,
+      singleUom: "",
+      singleUomId: 0,
+      minThreshold: null,
+      maxThreshold: null,
     });
   };
 
@@ -71,6 +80,22 @@ export default function ItemsScreen() {
   const confirmDelete = async () => {
     if (deletingItemId === null) return;
 
+    const hasUnsyncedSales = salesToday.some(
+      (sale) =>
+        sale.itemId === deletingItemId &&
+        sale.synced === false &&
+        sale.pendingDelete !== true,
+    );
+
+    if (hasUnsyncedSales) {
+      showSnackbar(
+        "Cannot delete this item while it has unsynced sales. Sync or remove those sales first.",
+        "error",
+      );
+      setDeletingItemId(null);
+      return;
+    }
+
     deleteMutation.mutate(deletingItemId, {
       onSuccess: () => {
         removeItem(deletingItemId);
@@ -85,22 +110,27 @@ export default function ItemsScreen() {
     });
   };
 
-  const handleSave = async (item: Item) => {
-    saveMutation.mutate(item, {
-      onSuccess: (savedItem) => {
-        updateItem(savedItem);
-        showSnackbar(
-          isAddMode ? "Item added successfully." : "Item updated successfully.",
-          "success",
-        );
-        setEditingItem(null);
-        setIsAddMode(false);
+  const handleSave = async (item: Item, supplierIds: number[]) => {
+    saveMutation.mutate(
+      { item, supplierIds },
+      {
+        onSuccess: (savedItem) => {
+          updateItem(savedItem);
+          showSnackbar(
+            isAddMode
+              ? "Item added successfully."
+              : "Item updated successfully.",
+            "success",
+          );
+          setEditingItem(null);
+          setIsAddMode(false);
+        },
+        onError: (error) => {
+          console.error("Failed to save item:", error);
+          showSnackbar(error.message, "error");
+        },
       },
-      onError: (error) => {
-        console.error("Failed to save item:", error);
-        showSnackbar(error.message, "error");
-      },
-    });
+    );
   };
 
   const handleDismiss = () => {
@@ -130,13 +160,17 @@ export default function ItemsScreen() {
       />
 
       <View className="flex-1 bg-gray-50 pt-4">
-        <SearchFilterBar placeholder="Search items">
-          {(query, selectedType) => {
+        <SearchFilterBar placeholder="Search items" showSupplierFilter suppliers={suppliers}>
+          {(query, selectedType, selectedSupplierId) => {
             const filtered = items.filter((it) => {
               const q = query.trim().toLowerCase();
+              const matchesSupplier =
+                !selectedSupplierId ||
+                (itemSupplierMap[it.id] ?? []).includes(selectedSupplierId);
               return (
                 (!q || (it.name || "").toLowerCase().includes(q)) &&
-                (!selectedType || it.typeId === selectedType)
+                (!selectedType || it.typeId === selectedType) &&
+                matchesSupplier
               );
             });
             return (
@@ -146,6 +180,7 @@ export default function ItemsScreen() {
                 supplierItems={itemSupplierMap}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onHistory={handleHistory}
               />
             );
           }}
@@ -161,6 +196,12 @@ export default function ItemsScreen() {
         isLoading={saveMutation.isPending}
         onSave={handleSave}
         onDismiss={handleDismiss}
+      />
+
+      <ItemPriceHistorySheet
+        open={historyItem !== null}
+        item={historyItem}
+        onDismiss={() => setHistoryItem(null)}
       />
 
       <ConfirmDialog

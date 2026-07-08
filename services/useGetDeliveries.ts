@@ -1,34 +1,92 @@
-import { Delivery } from "@/models/Delivery";
+import { Delivery, DeliveryPayment } from "@/models/Delivery";
 import { useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { endOfDay, format, startOfDay } from "date-fns";
 import { useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useStore } from "../store/useStore";
 
 async function fetchDeliveries(): Promise<Delivery[]> {
-  const { data, error } = await supabase
-    .from("vw_deliveries_today")
-    .select("*");
+  const now = new Date();
+  const start = startOfDay(now).toISOString();
+  const end = endOfDay(now).toISOString();
 
-  if (error) {
-    throw new Error(error.message);
+  // Step 1: fetch delivery batches for today including payment breakdown.
+  // Date filter on the root table is always reliable in PostgREST.
+  const { data: batches, error: batchError } = await supabase
+    .from("delivery")
+    .select(
+      `id, transaction_date, is_paid,
+       supplier:supplier_id(id, name),
+       delivery_payment(
+         id, payment_mode_id, amount, source_date, source_type, remarks,
+         payment_mode:payment_mode_id(id, mode),
+         sourceType:source_type(id, description)
+       )`,
+    )
+    .gte("transaction_date", start)
+    .lte("transaction_date", end);
+
+  if (batchError) throw new Error(batchError.message);
+  if (!batches || batches.length === 0) return [];
+
+  const batchIds = (batches as any[]).map((b) => b.id);
+
+  // Build a lookup: deliveryId → { batch meta, payments[] }
+  const batchMap: Record<number, { batch: any; payments: DeliveryPayment[] }> =
+    {};
+  for (const b of batches as any[]) {
+    const payments: DeliveryPayment[] = (b.delivery_payment ?? []).map(
+      (p: any) => ({
+        id: Number(p.id),
+        paymentModeId:
+          p.payment_mode?.id != null ? Number(p.payment_mode.id) : null,
+        paymentModeName: p.payment_mode?.mode ?? null,
+        amount: Number(p.amount ?? 0),
+        sourceDate: p.source_date ?? null,
+        sourceTypeId: p.source_type != null ? Number(p.source_type) : null,
+        sourceTypeDescription: p.sourceType?.description ?? null,
+        remarks: p.remarks ?? null,
+      }),
+    );
+    batchMap[Number(b.id)] = { batch: b, payments };
   }
 
-  if (!data) return [];
+  // Step 2: fetch line items for those batches (simple IN — no FK needed).
+  const { data: items, error: itemsError } = await supabase
+    .from("delivery_item")
+    .select(
+      `id, delivery_id, quantity, price,
+       item:item_id(id, name),
+       uom:uom_id(id, name)`,
+    )
+    .in("delivery_id", batchIds);
 
-  return data.map((row: any) => ({
-    id: Number(row.id),
-    transactionDate: row.transaction_date ?? null,
-    supplierId: row.supplier_id != null ? Number(row.supplier_id) : null,
-    supplierName: row.supplier_name ?? null,
-    itemId: row.item_id != null ? Number(row.item_id) : null,
-    itemName: row.item_name ?? null,
-    quantity: Number(row.quantity ?? 0),
-    uomId: row.uom_id != null ? Number(row.uom_id) : null,
-    uom: row.uom ?? null,
-    price: Number(row.price ?? 0),
-    total: Number(row.total ?? 0),
-  }));
+  if (itemsError) throw new Error(itemsError.message);
+  if (!items) return [];
+
+  return (items as any[]).map((item) => {
+    const entry = batchMap[Number(item.delivery_id)];
+    const batch = entry?.batch as any;
+    const qty = Number(item.quantity ?? 0);
+    const price = Number(item.price ?? 0);
+    return {
+      id: Number(item.id),
+      deliveryId: Number(batch?.id),
+      transactionDate: batch?.transaction_date ?? null,
+      supplierId:
+        batch?.supplier?.id != null ? Number(batch.supplier.id) : null,
+      supplierName: batch?.supplier?.name ?? null,
+      isPaid: batch?.is_paid ?? true,
+      itemId: item.item?.id != null ? Number(item.item.id) : null,
+      itemName: item.item?.name ?? null,
+      quantity: qty,
+      uomId: item.uom?.id != null ? Number(item.uom.id) : null,
+      uom: item.uom?.name ?? null,
+      price,
+      total: qty * price,
+      payments: entry?.payments ?? [],
+    };
+  });
 }
 
 export function useGetDeliveries() {

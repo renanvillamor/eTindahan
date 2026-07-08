@@ -58,13 +58,17 @@ export default function DailyInventoryReport() {
     );
   }, [fromStr, toStr]);
 
-  // qtyMap[itemId][date] = qtyOnHand
+  // qtyMap[itemId][date] = actualQty
   const qtyMap = useMemo<Record<number, Record<string, number>>>(() => {
     const map: Record<number, Record<string, number>> = {};
     if (!rawData) return map;
     for (const row of rawData) {
       if (!map[row.itemId]) map[row.itemId] = {};
-      map[row.itemId][row.date] = row.qtyOnHand;
+      // First-wins: data is DESC by date then id, so the first record
+      // for each item+date is the most recent — don't overwrite it.
+      if (map[row.itemId][row.date] == null) {
+        map[row.itemId][row.date] = row.actualQty;
+      }
     }
     return map;
   }, [rawData]);
@@ -140,8 +144,10 @@ export default function DailyInventoryReport() {
         <SearchFilterBar
           placeholder="Search items..."
           sortOptions={SORT_OPTIONS}
+          showSupplierFilter
+          suppliers={suppliers}
         >
-          {(query, selectedType, sortKey, sortDir) => {
+          {(query, selectedType, selectedSupplierId, sortKey, sortDir) => {
             if (isLoading) {
               return (
                 <View className="flex-1 items-center justify-center py-16">
@@ -168,9 +174,13 @@ export default function DailyInventoryReport() {
               })
               .filter((row) => {
                 const q = query.trim().toLowerCase();
+                const matchesSupplier =
+                  !selectedSupplierId ||
+                  (itemSupplierMap[row.itemId] ?? []).includes(selectedSupplierId);
                 return (
                   (!q || row.itemName.toLowerCase().includes(q)) &&
-                  (!selectedType || row.typeId === selectedType)
+                  (!selectedType || row.typeId === selectedType) &&
+                  matchesSupplier
                 );
               });
 

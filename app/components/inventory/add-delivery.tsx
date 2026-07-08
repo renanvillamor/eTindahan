@@ -3,9 +3,10 @@ import { useAppTheme } from "@/hooks/useAppTheme";
 import { useSnackbar } from "@/lib/SnackbarContext";
 import { formatCurrency } from "@/lib/utils";
 import { Stack, router } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,7 +14,12 @@ import {
   View,
 } from "react-native";
 import { Chip, IconButton, List, Searchbar } from "react-native-paper";
-import { useSaveDelivery } from "../../../services/useSaveDelivery";
+import {
+  CashExpenseInput,
+  PayableInput,
+  PaymentMethodInput,
+  useSaveDelivery,
+} from "../../../services/useSaveDelivery";
 import { useStore } from "../../../store/useStore";
 import DeliverySummaryBottomSheet from "./DeliverySummaryBottomSheet";
 
@@ -22,8 +28,10 @@ export default function AddDeliveryScreen() {
   const styles = useStyles(colors);
   const { showSnackbar } = useSnackbar();
   const items = useStore((s) => s.items);
+  const itemTypes = useStore((s) => s.itemTypes);
   const suppliers = useStore((s) => (s as any).suppliers ?? []);
   const supplierItems = useStore((s) => s.supplierItems);
+  const paymentModes = useStore((s) => s.paymentModes);
   const saveDeliveryMutation = useSaveDelivery();
 
   const [qtyByItemId, setQtyByItemId] = useState<Record<number, number>>({});
@@ -32,35 +40,69 @@ export default function AddDeliveryScreen() {
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [fractionItemId, setFractionItemId] = useState<number | null>(null);
 
+  const chipScrollRef = useRef<ScrollView>(null);
+  const [chipScrollInfo, setChipScrollInfo] = useState({
+    offset: 0,
+    contentWidth: 0,
+    layoutWidth: 0,
+  });
+  const showLeftArrow = chipScrollInfo.offset > 0;
+  const showRightArrow =
+    chipScrollInfo.contentWidth > chipScrollInfo.layoutWidth &&
+    chipScrollInfo.offset + chipScrollInfo.layoutWidth <
+      chipScrollInfo.contentWidth - 1;
+
   const selectedItems = useMemo(() => {
     return items.filter((it) => (qtyByItemId[it.id] ?? 0) > 0);
   }, [items, qtyByItemId]);
 
-  const handleSummarySave = useCallback(() => {
-    const deliveryItems = selectedItems.map((item) => ({
-      item_id: item.id,
-      supplier_id: selectedSupplier,
-      quantity: qtyByItemId[item.id] ?? 0,
-      uom_id: item.packUomId,
-      price: item.supplierPrice,
-      total: (qtyByItemId[item.id] ?? 0) * (item.supplierPrice ?? 0),
-    }));
+  const handleSummarySave = useCallback(
+    (
+      isPaid: boolean,
+      dueDate: string | null,
+      reference: string | null,
+      paymentMethods: PaymentMethodInput[],
+      cashExpenses: CashExpenseInput[],
+      payables: PayableInput[],
+    ) => {
+      const deliveryItems = selectedItems.map((item) => ({
+        item_id: item.id,
+        quantity: qtyByItemId[item.id] ?? 0,
+        uom_id: item.packUomId,
+        price: item.supplierPrice,
+      }));
 
-    saveDeliveryMutation.mutate(
-      { items: deliveryItems },
-      {
-        onSuccess: () => {
-          setSummaryOpen(false);
-          setQtyByItemId({});
-          showSnackbar("Delivery saved successfully!", "success");
-          router.back();
+      saveDeliveryMutation.mutate(
+        {
+          supplierId: selectedSupplier,
+          items: deliveryItems,
+          isPaid,
+          dueDate,
+          reference,
+          paymentMethods,
+          cashExpenses,
+          payables,
         },
-        onError: (error) => {
-          showSnackbar(error.message, "error");
+        {
+          onSuccess: () => {
+            setSummaryOpen(false);
+            setQtyByItemId({});
+            showSnackbar(
+              isPaid
+                ? "Delivery saved successfully!"
+                : "Delivery saved and payable created!",
+              "success",
+            );
+            router.back();
+          },
+          onError: (error) => {
+            showSnackbar(error.message, "error");
+          },
         },
-      },
-    );
-  }, [selectedItems, selectedSupplier, qtyByItemId, saveDeliveryMutation]);
+      );
+    },
+    [selectedItems, selectedSupplier, qtyByItemId, saveDeliveryMutation],
+  );
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -147,27 +189,79 @@ export default function AddDeliveryScreen() {
           />
         </View>
 
-        <View className="flex-row my-2 flex-wrap">
-          {suppliers.map((s: any) => (
-            <Chip
-              key={s.id}
-              mode="outlined"
-              selected={selectedSupplier === s.id}
-              showSelectedCheck={false}
+        <View className="flex-row items-center my-2">
+          {showLeftArrow && (
+            <IconButton
+              icon="chevron-left"
+              size={20}
+              style={styles.chipArrowBtn}
               onPress={() =>
-                setSelectedSupplier(selectedSupplier === s.id ? null : s.id)
+                chipScrollRef.current?.scrollTo({
+                  x: chipScrollInfo.offset - 120,
+                  animated: true,
+                })
               }
-              style={[
-                styles.chip,
-                selectedSupplier === s.id && styles.selectedChip,
-              ]}
-              textStyle={
-                selectedSupplier === s.id ? styles.selectedText : undefined
+            />
+          )}
+          <ScrollView
+            ref={chipScrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            className="flex-1"
+            onScroll={(e) => {
+              const { contentOffset, contentSize, layoutMeasurement } =
+                e.nativeEvent;
+              setChipScrollInfo({
+                offset: contentOffset.x,
+                contentWidth: contentSize.width,
+                layoutWidth: layoutMeasurement.width,
+              });
+            }}
+            onLayout={(e) => {
+              const width = e?.nativeEvent?.layout?.width;
+              if (width != null) {
+                setChipScrollInfo((prev) => ({ ...prev, layoutWidth: width }));
               }
-            >
-              {s.name}
-            </Chip>
-          ))}
+            }}
+            onContentSizeChange={(w) => {
+              setChipScrollInfo((prev) => ({ ...prev, contentWidth: w }));
+            }}
+            scrollEventThrottle={16}
+          >
+            {suppliers.map((s: any) => (
+              <Chip
+                key={s.id}
+                mode="outlined"
+                selected={selectedSupplier === s.id}
+                showSelectedCheck={false}
+                onPress={() =>
+                  setSelectedSupplier(selectedSupplier === s.id ? null : s.id)
+                }
+                style={[
+                  styles.chip,
+                  selectedSupplier === s.id && styles.selectedChip,
+                ]}
+                textStyle={
+                  selectedSupplier === s.id ? styles.selectedText : undefined
+                }
+              >
+                {s.name}
+              </Chip>
+            ))}
+          </ScrollView>
+          {showRightArrow && (
+            <IconButton
+              icon="chevron-right"
+              size={20}
+              style={styles.chipArrowBtn}
+              onPress={() =>
+                chipScrollRef.current?.scrollTo({
+                  x: chipScrollInfo.offset + 120,
+                  animated: true,
+                })
+              }
+            />
+          )}
         </View>
 
         <FlatList
@@ -253,11 +347,15 @@ export default function AddDeliveryScreen() {
 
       <DeliverySummaryBottomSheet
         open={summaryOpen}
+        isSaving={saveDeliveryMutation.isPending}
         onSave={handleSummarySave}
         onDismiss={() => setSummaryOpen(false)}
         supplierName={selectedSupplierName}
+        supplierId={selectedSupplier}
         items={selectedItems}
         qtyByItemId={qtyByItemId}
+        itemTypes={itemTypes}
+        paymentModes={paymentModes}
       />
     </>
   );
@@ -279,6 +377,11 @@ const useStyles = (colors: any) =>
     },
     selectedText: {
       color: "white",
+    },
+    chipArrowBtn: {
+      margin: 0,
+      width: 32,
+      height: 32,
     },
     qtyRow: {
       flexDirection: "row" as const,

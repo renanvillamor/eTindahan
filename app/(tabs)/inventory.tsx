@@ -4,7 +4,7 @@ import useSafePush from "@/lib/useSafePush";
 import { Inventory } from "@/models/Inventory";
 import { Supplier } from "@/models/Supplier";
 import { useGetInventories } from "@/services/useGetInventories";
-import React, { memo, useMemo, useState } from "react";
+import React, { memo, useMemo } from "react";
 import {
   RefreshControl,
   SectionList,
@@ -62,29 +62,38 @@ function buildSupplierSections<T>(
   return sections;
 }
 
-type InventoryRowProps = { item: Inventory; soldToday: number };
+type InventoryRowProps = {
+  item: Inventory;
+  soldToday: number;
+  deliveredToday: number;
+};
 
 const InventoryRow = memo(function InventoryRow({
   item,
   soldToday,
+  deliveredToday,
 }: InventoryRowProps) {
   const lastInv = item.actualQty ?? 0;
-  const onHand = lastInv - soldToday;
+  const onHand = lastInv + deliveredToday - soldToday;
   return (
     <List.Item
       title={item.name}
       titleNumberOfLines={1}
-      description={
-        item.uom
-          ? () => <Text className="text-sm text-gray-400">UOM: {item.uom}</Text>
-          : undefined
-      }
       style={invRowStyle}
       right={() => (
         <View className="flex-row items-center">
           <View className="w-16 items-center">
             <Text className="text-sm font-medium text-gray-600">
               {Number.isInteger(lastInv) ? `${lastInv}` : lastInv.toFixed(2)}
+            </Text>
+          </View>
+          <View className="w-16 items-center">
+            <Text className="text-sm font-medium text-green-600">
+              {deliveredToday > 0
+                ? Number.isInteger(deliveredToday)
+                  ? `+${deliveredToday}`
+                  : `+${deliveredToday.toFixed(2)}`
+                : "0"}
             </Text>
           </View>
           <View className="w-16 items-center">
@@ -113,10 +122,9 @@ export default function InventoryScreen() {
   const { colors } = useAppTheme();
   const inventories = useStore((state) => state.inventories);
   const salesToday = useStore((state) => state.salesToday);
+  const deliveries = useStore((state) => state.deliveries);
   const suppliers = useStore((s) => s.suppliers);
   const supplierItems = useStore((s) => s.supplierItems);
-  const [fabOpen, setFabOpen] = useState(false);
-
   const styles = useStyles(colors);
   const safePush = useSafePush();
   const { refetch, isFetching } = useGetInventories();
@@ -141,6 +149,16 @@ export default function InventoryScreen() {
     return map;
   }, [salesToday, packSizeByItemId]);
 
+  // Map itemId → total qty delivered today (in pack UOM)
+  const deliveredTodayByItemId = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const d of deliveries) {
+      if (d.itemId == null) continue;
+      map[d.itemId] = (map[d.itemId] ?? 0) + d.quantity;
+    }
+    return map;
+  }, [deliveries]);
+
   // Build reverse map: itemId → supplierId[]
   const itemSupplierMap = useMemo(() => {
     const map: Record<number, number[]> = {};
@@ -162,13 +180,17 @@ export default function InventoryScreen() {
         </Text>
       </View>
 
-      <SearchFilterBar placeholder="Search items">
-        {(query, selectedType, sortKey, sortDir) => {
+      <SearchFilterBar placeholder="Search items" showSupplierFilter suppliers={suppliers}>
+        {(query, selectedType, selectedSupplierId, sortKey, sortDir) => {
           let filtered = inventories.filter((it) => {
             const q = query.trim().toLowerCase();
+            const matchesSupplier =
+              !selectedSupplierId ||
+              (itemSupplierMap[it.itemId] ?? []).includes(selectedSupplierId);
             return (
               (!q || (it.name || "").toLowerCase().includes(q)) &&
-              (!selectedType || it.typeId === selectedType)
+              (!selectedType || it.typeId === selectedType) &&
+              matchesSupplier
             );
           });
           if (sortKey) {
@@ -180,8 +202,14 @@ export default function InventoryScreen() {
                 case "type":
                   return dir * (a.type ?? "").localeCompare(b.type ?? "");
                 case "quantity": {
-                  const aQty = a.qtyOnHand - (soldTodayByItemId[a.itemId] ?? 0);
-                  const bQty = b.qtyOnHand - (soldTodayByItemId[b.itemId] ?? 0);
+                  const aQty =
+                    (a.actualQty ?? 0) +
+                    (deliveredTodayByItemId[a.itemId] ?? 0) -
+                    (soldTodayByItemId[a.itemId] ?? 0);
+                  const bQty =
+                    (b.actualQty ?? 0) +
+                    (deliveredTodayByItemId[b.itemId] ?? 0) -
+                    (soldTodayByItemId[b.itemId] ?? 0);
                   return dir * (aQty - bQty);
                 }
                 default:
@@ -207,8 +235,11 @@ export default function InventoryScreen() {
               {/* Sticky column header */}
               <View className="flex-row px-4 py-2 bg-gray-50 border-b border-gray-200">
                 <Text className="flex-1 text-xs font-semibold text-gray-400"></Text>
-                <Text className="w-17 text-xs font-semibold text-gray-400 text-center">
+                <Text className="w-16 text-xs font-semibold text-gray-400 text-center">
                   LAST{"\n"}INVENTORY
+                </Text>
+                <Text className="w-16 text-xs font-semibold text-gray-400 text-center">
+                  DELIVERY{"\n"}TODAY
                 </Text>
                 <Text className="w-16 text-xs font-semibold text-gray-400 text-center">
                   SOLD{"\n"}TODAY
@@ -238,6 +269,7 @@ export default function InventoryScreen() {
                   <InventoryRow
                     item={item}
                     soldToday={soldTodayByItemId[item.itemId] ?? 0}
+                    deliveredToday={deliveredTodayByItemId[item.itemId] ?? 0}
                   />
                 )}
               />
@@ -246,29 +278,11 @@ export default function InventoryScreen() {
         }}
       </SearchFilterBar>
 
-      <FAB.Group
-        open={fabOpen}
-        visible
-        icon={fabOpen ? "close" : "dots-vertical"}
+      <FAB
+        icon="package-variant-plus"
         color="white"
-        fabStyle={styles.fab}
-        onStateChange={({ open }) => setFabOpen(open)}
-        actions={[
-          {
-            icon: "truck-delivery-outline",
-            label: "Deliveries",
-            onPress: () => safePush("/components/inventory/delivery"),
-            color: "white",
-            style: styles.actionFab,
-          },
-          {
-            icon: "package-variant-plus",
-            label: "Add Inventory",
-            onPress: () => safePush("/components/inventory/add-inventory"),
-            color: "white",
-            style: styles.actionFab,
-          },
-        ]}
+        style={styles.fab}
+        onPress={() => safePush("/components/inventory/add-inventory")}
       />
     </View>
   );
@@ -277,10 +291,9 @@ export default function InventoryScreen() {
 const useStyles = (colors: any) =>
   StyleSheet.create({
     fab: {
-      borderRadius: 28,
-      backgroundColor: colors.primary,
-    },
-    actionFab: {
+      position: "absolute",
+      right: 16,
+      bottom: 24,
       borderRadius: 28,
       backgroundColor: colors.primary,
     },

@@ -5,7 +5,7 @@ export type InventoryReportRow = {
   id: number;
   itemId: number;
   date: string;
-  qtyOnHand: number;
+  actualQty: number;
 };
 
 async function fetchInventoryReport(
@@ -14,11 +14,11 @@ async function fetchInventoryReport(
 ): Promise<InventoryReportRow[]> {
   const { data, error } = await supabase
     .from("inventory")
-    .select("id, item_id, created_date, qty_on_hand")
+    .select("id, item_id, created_date, actual_qty")
     .gte("created_date", fromDate)
     .lte("created_date", toDate)
     .order("created_date", { ascending: false })
-    .order("item_id", { ascending: true });
+    .order("id", { ascending: false });
 
   if (error) throw new Error(error.message);
   if (!data) return [];
@@ -27,7 +27,7 @@ async function fetchInventoryReport(
     id: Number(row.id),
     itemId: Number(row.item_id),
     date: String(row.created_date).slice(0, 10), // normalize to "yyyy-MM-dd"
-    qtyOnHand: Number(row.qty_on_hand ?? 0),
+    actualQty: Number(row.actual_qty ?? 0),
   }));
 }
 
