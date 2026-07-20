@@ -29,7 +29,7 @@ type TableItem = {
   qtyByDate: Record<string, number>;
 };
 
-export default function DailySalesReport() {
+export default function DailySalesPerItemReport() {
   const { colors } = useAppTheme();
   const items = useStore((s) => s.items);
 
@@ -73,7 +73,7 @@ export default function DailySalesReport() {
     <>
       <Stack.Screen
         options={{
-          title: "Daily Sales",
+          title: "Daily Sales Per Item",
           headerTitleAlign: "center",
           animation: "slide_from_right",
           headerLeft: () => (

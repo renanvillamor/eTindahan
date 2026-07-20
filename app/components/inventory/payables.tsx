@@ -15,7 +15,7 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { addDays, format, isValid, parseISO } from "date-fns";
+import { format, isValid, parseISO, startOfDay } from "date-fns";
 import { router, Stack, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -50,6 +50,22 @@ function formatDateLabel(iso: string | null | undefined): string {
   }
 }
 
+// Single source of truth for "overdue" — a payable is overdue once its due
+// date has fully elapsed (not merely started), so this compares against the
+// start of today rather than the current instant. Shared by the row badge
+// and the "Overdue Only" filter so the two can't disagree on what overdue
+// means, as they previously did (badge used "due date passed", the filter
+// used "due within the next 7 days").
+function isPayableOverdue(payable: Payable): boolean {
+  if (payable.paidDate || !payable.dueDate) return false;
+  try {
+    const dt = parseISO(payable.dueDate.slice(0, 10));
+    return isValid(dt) && dt < startOfDay(new Date());
+  } catch {
+    return false;
+  }
+}
+
 function PayableRow({
   item,
   onPress,
@@ -61,17 +77,7 @@ function PayableRow({
 }) {
   const { colors } = useAppTheme();
   const isPaid = !!item.paidDate;
-  const isOverdue =
-    !isPaid &&
-    item.dueDate != null &&
-    (() => {
-      try {
-        const dt = parseISO(item.dueDate!.slice(0, 10));
-        return isValid(dt) && dt < new Date();
-      } catch {
-        return false;
-      }
-    })();
+  const isOverdue = isPayableOverdue(item);
 
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={() => onPress(item)}>
@@ -217,8 +223,6 @@ export default function PayablesScreen() {
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
   const [selectedPayeeId, setSelectedPayeeId] = useState<number | null>(null);
 
-  const overdueThreshold = useMemo(() => addDays(new Date(), 7), []);
-
   const payeeOptions = useMemo(() => {
     const seen = new Set<number>();
     const options: { id: number; name: string }[] = [];
@@ -234,26 +238,11 @@ export default function PayablesScreen() {
   const filtered = useMemo(() => {
     let result = payables;
     if (showUnpaidOnly) result = result.filter((p) => !p.paidDate);
-    if (showOverdueOnly)
-      result = result.filter((p) => {
-        if (p.paidDate || !p.dueDate) return false;
-        try {
-          const dt = parseISO(p.dueDate.slice(0, 10));
-          return isValid(dt) && dt <= overdueThreshold;
-        } catch {
-          return false;
-        }
-      });
+    if (showOverdueOnly) result = result.filter(isPayableOverdue);
     if (selectedPayeeId !== null)
       result = result.filter((p) => p.payeeId === selectedPayeeId);
     return result;
-  }, [
-    payables,
-    showUnpaidOnly,
-    showOverdueOnly,
-    selectedPayeeId,
-    overdueThreshold,
-  ]);
+  }, [payables, showUnpaidOnly, showOverdueOnly, selectedPayeeId]);
 
   const totalPending = useMemo(
     () =>

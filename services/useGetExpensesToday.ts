@@ -1,3 +1,4 @@
+import { DEFAULT_STALE_TIME } from "@/lib/queryConfig";
 import { supabase } from "@/lib/supabaseClient";
 import { Expense } from "@/models/Expense";
 import { useQuery } from "@tanstack/react-query";
@@ -33,7 +34,6 @@ export function useGetExpensesToday() {
   return useQuery<Expense[], Error>({
     queryKey: ["expenses-today", format(new Date(), "yyyy-MM-dd")],
     queryFn: fetchExpensesToday,
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: DEFAULT_STALE_TIME,
   });
 }

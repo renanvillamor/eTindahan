@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node scripts/build-local-android.js --prepare-only)",
+      "Bash(node -e ' *)",
+      "Bash(node \"C:\\\\Users\\\\ASUS\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Projects-eTindahan\\\\17328de9-b2aa-46cb-bf0a-ff6dbc1ffbaf\\\\scratchpad\\\\test-spawn.js\")",
+      "Bash(git mv *)",
+      "Bash(find app *)",
+      "Bash(find . -maxdepth 1 -iname \"app.json\" -o -maxdepth 1 -iname \"app.config.*\")",
+      "Bash(git check-ignore *)",
+      "Bash(npx expo *)",
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).dependencies['react-native-keyboard-controller']\\)\")",
+      "Bash(node -e \"const p=require\\('./node_modules/react-native-keyboard-controller/package.json'\\); console.log\\(Object.keys\\(p\\)\\); console.log\\(p.main, p.types\\)\")",
+      "Bash(find node_modules/@gorhom/bottom-sheet/src -iname \"*keyboard*\")",
+      "Bash(find node_modules/@gorhom/bottom-sheet/lib -iname \"*keyboard*\")",
+      "Bash(node -e \"const p=require\\('./node_modules/@gorhom/bottom-sheet/package.json'\\); console.log\\(JSON.stringify\\(p.peerDependencies, null, 2\\)\\); console.log\\(JSON.stringify\\(p.peerDependenciesMeta, null, 2\\)\\); console.log\\(p.version\\)\")",
+      "WebFetch(domain:gorhom.dev)",
+      "Bash(npm uninstall *)",
+      "Bash(grep -rn \"targetSdkVersion\\\\|compileSdkVersion\\\\|targetSdk\" android/app/build.gradle android/build.gradle)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/expo/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/react-native/package.json'\\).version\\)\")",
+      "Bash(git checkout *)",
+      "Bash(npx prettier *)",
+      "Bash(git rm *)"
+    ]
+  }
+}

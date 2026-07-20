@@ -336,10 +336,10 @@ export default function InventorySnapshotReport() {
                     LAST{"\n"}INVENTORY
                   </Text>
                   <Text className="w-16 text-xs font-semibold text-gray-400 text-center">
-                    DELIVERY{"\n"}DAY
+                    DELIVERED{"\n"}SINCE
                   </Text>
                   <Text className="w-16 text-xs font-semibold text-gray-400 text-center">
-                    SOLD{"\n"}DAY
+                    SOLD{"\n"}SINCE
                   </Text>
                   <Text className="w-16 text-xs font-semibold text-gray-400 text-center">
                     QTY ON{"\n"}HAND

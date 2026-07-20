@@ -1,4 +1,6 @@
+import { DEFAULT_STALE_TIME } from "@/lib/queryConfig";
 import { supabase } from "@/lib/supabaseClient";
+import { localDayToUtcRange } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 
 export type DailySalesTypeRow = {
@@ -24,14 +26,16 @@ export type DailySummaryData = {
 };
 
 async function fetchDailySummary(date: string): Promise<DailySummaryData> {
+  const { startUtc, endUtc } = localDayToUtcRange(date);
+
   const [salesResult, expensesResult] = await Promise.all([
     supabase
       .from("sale")
       .select(
         "quantity, price, total, item_id, item:item_id(type_id, item_type:type_id(description))",
       )
-      .gte("transaction_date", date)
-      .lte("transaction_date", date + "T23:59:59"),
+      .gte("transaction_date", startUtc)
+      .lte("transaction_date", endUtc),
 
     supabase
       .from("expense")
@@ -103,7 +107,6 @@ export function useGetDailySummaryReport(date: string) {
     queryKey: ["daily-summary", date],
     queryFn: () => fetchDailySummary(date),
     enabled: !!date,
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: DEFAULT_STALE_TIME,
   });
 }

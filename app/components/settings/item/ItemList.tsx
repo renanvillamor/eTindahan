@@ -65,21 +65,38 @@ const ItemCard = memo(function ItemCard({
         style={{ backgroundColor: "#F8FAFC" }}
       >
         <View className="flex-1 items-center py-2">
-          <Text className="text-xs text-gray-400 mb-0.5">Supplier</Text>
+          <Text className="text-xs text-gray-400 mb-0.5">
+            Supplier{" "}
+            <Text className="text-[10px]">
+              / {item.packUom || "pack"}
+            </Text>
+          </Text>
           <Text className="text-sm font-semibold text-gray-700">
             ₱{item.supplierPrice.toFixed(2)}
           </Text>
+          {/* Supplier price is per pack, not per unit — show the per-unit
+              equivalent so it isn't misread as directly comparable to the
+              per-unit Wholesale/Retail prices beside it. */}
+          {item.packSize && item.packSize > 0 && (
+            <Text className="text-[10px] text-gray-400">
+              ≈ ₱{(item.supplierPrice / item.packSize).toFixed(2)}/unit
+            </Text>
+          )}
         </View>
         <View style={styles.priceDivider} />
         <View className="flex-1 items-center py-2">
-          <Text className="text-xs text-gray-400 mb-0.5">Wholesale</Text>
+          <Text className="text-xs text-gray-400 mb-0.5">
+            Wholesale <Text className="text-[10px]">/ unit</Text>
+          </Text>
           <Text className="text-sm font-semibold text-gray-700">
             ₱{item.wholesalePrice.toFixed(2)}
           </Text>
         </View>
         <View style={styles.priceDivider} />
         <View className="flex-1 items-center py-2">
-          <Text className="text-xs text-gray-400 mb-0.5">Retail</Text>
+          <Text className="text-xs text-gray-400 mb-0.5">
+            Retail <Text className="text-[10px]">/ unit</Text>
+          </Text>
           <Text className="text-sm font-semibold text-gray-700">
             ₱{item.retailPrice.toFixed(2)}
           </Text>

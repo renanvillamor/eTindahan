@@ -15,7 +15,7 @@ const SORT_OPTIONS: SortOption[] = [
   { key: "profit", label: "Profit" },
 ];
 
-export default function ProfitReport() {
+export default function ItemProfitReport() {
   const { colors } = useAppTheme();
   const items = useStore((s) => s.items);
 
@@ -30,7 +30,7 @@ export default function ProfitReport() {
     <>
       <Stack.Screen
         options={{
-          title: "Profit Report",
+          title: "Item Profit Report",
           headerTitleAlign: "center",
           animation: "slide_from_right",
           headerLeft: () => (

@@ -36,19 +36,24 @@ function formatPriceTime(ts: string | null): string {
   return isValid(d) ? format(d, "h:mm a") : "";
 }
 
-const TableHeader = () => (
+const TableHeader = ({ packUom }: { packUom: string | null }) => (
   <View style={styles.tableHeader}>
     <View style={styles.colDate}>
       <Text style={styles.headerText}>Date</Text>
     </View>
     <View style={styles.colPrice}>
       <Text style={styles.headerText}>Supplier</Text>
+      <Text style={styles.headerSubText}>
+        {packUom ? `/ ${packUom}` : "/ pack"}
+      </Text>
     </View>
     <View style={styles.colPrice}>
       <Text style={styles.headerText}>Wholesale</Text>
+      <Text style={styles.headerSubText}>/ unit</Text>
     </View>
     <View style={styles.colPrice}>
       <Text style={styles.headerText}>Retail</Text>
+      <Text style={styles.headerSubText}>/ unit</Text>
     </View>
   </View>
 );
@@ -103,6 +108,14 @@ export default function ItemPriceHistorySheet({
             <Text style={styles.cellPrice}>
               {formatCurrency(row.supplierPrice)}
             </Text>
+            {/* Supplier price is per pack — show the per-unit equivalent so
+                it isn't mistaken for a per-unit price when compared with
+                the Wholesale/Retail columns next to it. */}
+            {packSize && (
+              <Text style={styles.cellSubText}>
+                ≈ {formatCurrency(row.supplierPrice / packSize)}/unit
+              </Text>
+            )}
           </View>
           <View style={styles.colPrice}>
             <Text style={styles.cellPrice}>
@@ -159,7 +172,7 @@ export default function ItemPriceHistorySheet({
           data={rows}
           keyExtractor={(r: ItemPriceHistoryRow) => String(r.id)}
           renderItem={renderItem}
-          ListHeaderComponent={<TableHeader />}
+          ListHeaderComponent={<TableHeader packUom={item?.packUom ?? null} />}
           contentContainerStyle={styles.listContent}
         />
       )}
@@ -238,6 +251,12 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
+  headerSubText: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: "#9ca3af",
+    marginTop: 1,
+  },
   cellDate: {
     fontSize: 12,
     fontWeight: "600",
@@ -252,5 +271,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#111827",
+  },
+  cellSubText: {
+    fontSize: 10,
+    color: "#9ca3af",
+    marginTop: 1,
   },
 });

@@ -1,7 +1,10 @@
 import { SaleToday } from "@/models/SaleToday";
 import { useQuery } from "@tanstack/react-query";
 import { endOfDay, format, startOfDay } from "date-fns";
+import { useEffect } from "react";
+import { DEFAULT_STALE_TIME } from "../lib/queryConfig";
 import { supabase } from "../lib/supabaseClient";
+import { useStore } from "../store/useStore";
 
 async function fetchSalesToday(): Promise<SaleToday[]> {
   const now = new Date();
@@ -38,9 +41,26 @@ async function fetchSalesToday(): Promise<SaleToday[]> {
 }
 
 export function useGetSalesToday() {
-  return useQuery<SaleToday[], Error>({
+  const setSalesToday = useStore((s) => s.setSalesToday);
+
+  const result = useQuery<SaleToday[], Error>({
     queryKey: ["salesToday", format(new Date(), "yyyy-MM-dd")],
     queryFn: fetchSalesToday,
     refetchOnWindowFocus: false,
+    staleTime: DEFAULT_STALE_TIME,
   });
+
+  // Only merge fresh DB data into the store when a real fetch actually
+  // completes (dataUpdatedAt changes only on a successful response, not on
+  // every render) — merging on every `data` reference change can momentarily
+  // clear pending-delete / unsynced local sale flags in the store.
+  const { dataUpdatedAt, data } = result;
+  useEffect(() => {
+    if (dataUpdatedAt > 0 && data) {
+      setSalesToday(data);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dataUpdatedAt]);
+
+  return result;
 }

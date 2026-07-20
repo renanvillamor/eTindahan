@@ -36,7 +36,7 @@ type ItemLike = {
   id: number;
   name?: string | null;
   supplierPrice?: number | null;
-  deliveryUom?: string | null;
+  packUom?: string | null;
 };
 
 type DeliverySummaryBottomSheetProps = {
@@ -346,7 +346,7 @@ export default function DeliverySummaryBottomSheet({
             title={item.name ?? "Unnamed item"}
             description={() => (
               <Text className="text-sm text-gray-500">
-                {`${formatCurrency(price)} x ${qty} ${item.deliveryUom ? item.deliveryUom + "/s" : ""}`}
+                {`${formatCurrency(price)} x ${qty} ${item.packUom ? item.packUom + "/s" : ""}`}
               </Text>
             )}
             right={() => (

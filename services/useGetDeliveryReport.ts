@@ -1,7 +1,9 @@
 import { Delivery } from "@/models/Delivery";
 import { useQuery } from "@tanstack/react-query";
 import { addDays, format, parseISO } from "date-fns";
+import { DEFAULT_STALE_TIME } from "../lib/queryConfig";
 import { supabase } from "../lib/supabaseClient";
+import { localDayStartUtc } from "../lib/utils";
 
 async function fetchDeliveryReport(dateStr: string): Promise<Delivery[]> {
   const nextDateStr = format(addDays(parseISO(dateStr), 1), "yyyy-MM-dd");
@@ -10,8 +12,8 @@ async function fetchDeliveryReport(dateStr: string): Promise<Delivery[]> {
   const { data: batches, error: batchError } = await supabase
     .from("delivery")
     .select("id, transaction_date, is_paid, supplier:supplier_id(id, name)")
-    .gte("transaction_date", dateStr)
-    .lt("transaction_date", nextDateStr)
+    .gte("transaction_date", localDayStartUtc(dateStr))
+    .lt("transaction_date", localDayStartUtc(nextDateStr))
     .order("id", { ascending: false });
 
   if (batchError) {
@@ -68,7 +70,6 @@ export function useGetDeliveryReport(dateStr: string) {
     queryKey: ["deliveryReport", dateStr],
     queryFn: () => fetchDeliveryReport(dateStr),
     enabled: !!dateStr,
-    staleTime: 0,
-    refetchOnMount: "always",
+    staleTime: DEFAULT_STALE_TIME,
   });
 }

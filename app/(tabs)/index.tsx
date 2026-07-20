@@ -2,10 +2,12 @@ import ConfirmDialog from "@/app/components/shared/ConfirmDialog";
 import SaleDetailSheet from "@/app/components/shared/SaleDetailSheet";
 import { CARD_COLORS } from "@/constants/Constants";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { useSnackbar } from "@/lib/SnackbarContext";
 import useSafePush from "@/lib/useSafePush";
 import { formatCurrency } from "@/lib/utils";
 import { SaleToday } from "@/models/SaleToday";
 import {
+  syncPendingDeletions,
   useMarkSaleForDeletion,
   useUndoSaleDeletion,
 } from "@/services/useDeleteSale";
@@ -13,7 +15,7 @@ import { useGetExpensesToday } from "@/services/useGetExpensesToday";
 import { useGetSalesToday } from "@/services/useGetSalesToday";
 import { useStore } from "@/store/useStore";
 import { format } from "date-fns";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import {
   FlatList,
   RefreshControl,
@@ -102,15 +104,10 @@ export default function DashboardScreen() {
   const safePush = useSafePush();
   const [fabOpen, setFabOpen] = useState(false);
   const fabStyles = useFabStyles(colors);
-  const {
-    data: dbSales,
-    isFetching: isFetchingSales,
-    refetch: refetchSales,
-    dataUpdatedAt,
-  } = useGetSalesToday();
+  const { isFetching: isFetchingSales, refetch: refetchSales } =
+    useGetSalesToday();
   const sales = useStore((s) => s.salesToday);
   const itemTypes = useStore((s) => s.itemTypes);
-  const setSalesToday = useStore((s) => s.setSalesToday);
   const {
     data: expensesToday = [],
     isFetching: isFetchingExpenses,
@@ -137,18 +134,6 @@ export default function DashboardScreen() {
       return t >= startMs && t <= endMs;
     });
   }, [sales]);
-
-  // Only merge fresh DB data into the store when a real fetch actually completes
-  // (dataUpdatedAt changes only on a successful response, not on every render).
-  // Using isSuccess + dbSales caused setSalesToday to fire on every reference
-  // change of dbSales during the refetch cycle, which could momentarily clear
-  // pending-delete / unsynced flags from the store.
-  useEffect(() => {
-    if (dataUpdatedAt > 0 && dbSales) {
-      setSalesToday(dbSales);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataUpdatedAt]);
 
   const sorted = useMemo(
     () =>
@@ -201,6 +186,8 @@ export default function DashboardScreen() {
   const [deleteTarget, setDeleteTarget] = useState<SaleToday | null>(null);
   const markSaleForDeletion = useMarkSaleForDeletion();
   const undoSaleDeletion = useUndoSaleDeletion();
+  const removeSalesByIds = useStore((s) => s.removeSalesByIds);
+  const { showSnackbar } = useSnackbar();
 
   const handleRowPress = useCallback((item: SaleToday) => {
     setSelectedSale(item);
@@ -217,11 +204,30 @@ export default function DashboardScreen() {
     setSelectedSale(null);
   }, [selectedSale, undoSaleDeletion]);
 
-  const handleDeleteConfirm = useCallback(() => {
+  const handleDeleteConfirm = useCallback(async () => {
     if (!deleteTarget) return;
-    markSaleForDeletion(deleteTarget.id);
+    const target = deleteTarget;
     setDeleteTarget(null);
-  }, [deleteTarget, markSaleForDeletion]);
+    markSaleForDeletion(target.id);
+
+    // Try to delete from the server right away instead of only waiting for
+    // a later reconnect/manual-sync event — otherwise, on a continuously
+    // online device, the row stays live in Supabase indefinitely even
+    // though it's gone from this device's totals.
+    if (target.id > 0) {
+      try {
+        await syncPendingDeletions([target.id]);
+        removeSalesByIds([target.id]);
+      } catch {
+        // Leave the pendingDelete flag set — it'll be picked up by the next
+        // reconnect or manual "Sync Data" instead.
+        showSnackbar(
+          "Deleted locally — will sync to the server on next connection.",
+          "info",
+        );
+      }
+    }
+  }, [deleteTarget, markSaleForDeletion, removeSalesByIds, showSnackbar]);
 
   const displayedSales = useMemo(
     () =>

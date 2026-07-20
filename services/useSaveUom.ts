@@ -42,6 +42,11 @@ export function useSaveUom() {
     mutationFn: saveUom,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["uoms"] });
+      // Items derive packSize/pricing from their pack UOM (vw_item_price),
+      // and useGetItems uses staleTime: Infinity — without this, editing a
+      // UOM's pack size leaves every item using it stale until an unrelated
+      // item edit or app restart.
+      queryClient.invalidateQueries({ queryKey: ["items"] });
     },
   });
 }

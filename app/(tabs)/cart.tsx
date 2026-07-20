@@ -1,5 +1,5 @@
 import CheckoutBottomSheet from "@/app/components/cart/CheckoutBottomSheet";
-import FractionPickerSheet from "@/app/components/shared/FractionPickerSheet";
+import ItemQuantitySheet from "@/app/components/shared/ItemQuantitySheet";
 import SearchFilterBar from "@/app/components/shared/SearchFilterBar";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { useSnackbar } from "@/lib/SnackbarContext";
@@ -7,7 +7,7 @@ import { formatCurrency } from "@/lib/utils";
 import { Item } from "@/models/Item";
 import { SaleToday } from "@/models/SaleToday";
 import { useStore } from "@/store/useStore";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Text as RNText,
@@ -54,9 +54,28 @@ export default function CartScreen() {
   );
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [fractionItemId, setFractionItemId] = useState<number | null>(null);
+  const [quantitySheetItemId, setQuantitySheetItemId] = useState<
+    number | null
+  >(null);
+
+  // Guards against a double-tap on "Pay" recording the same cart twice.
+  // A ref (not state) is required because two fast taps each dispatch their
+  // own onPress before React re-renders with a disabled button in between —
+  // the lock is only released when the user opens a fresh checkout.
+  const payLockRef = useRef(false);
+  const [isPaying, setIsPaying] = useState(false);
+
+  const handleOpenCheckout = useCallback(() => {
+    payLockRef.current = false;
+    setIsPaying(false);
+    setCheckoutOpen(true);
+  }, []);
 
   const handlePay = useCallback(() => {
+    if (payLockRef.current) return;
+    payLockRef.current = true;
+    setIsPaying(true);
+
     const now = new Date().toISOString();
     const chosenMode =
       paymentModes.find((m) => m.id === resolvedModeId) ?? null;
@@ -155,14 +174,14 @@ export default function CartScreen() {
                 />
               </View>
 
-              {/* Fraction picker button */}
+              {/* Quantity mode picker button (fraction / amount / pieces) */}
               <TouchableOpacity
                 activeOpacity={0.7}
                 style={[styles.fracButton, { borderColor: colors.primary }]}
-                onPress={() => setFractionItemId(item.id)}
+                onPress={() => setQuantitySheetItemId(item.id)}
               >
                 <RNText style={[styles.fracGlyph, { color: colors.primary }]}>
-                  ½
+                  ⋯
                 </RNText>
               </TouchableOpacity>
             </View>
@@ -170,7 +189,7 @@ export default function CartScreen() {
         />
       );
     },
-    [qtyByItemId, setQty, handleTextChange, setFractionItemId, colors],
+    [qtyByItemId, setQty, handleTextChange, setQuantitySheetItemId, colors],
   );
 
   return (
@@ -238,26 +257,27 @@ export default function CartScreen() {
         <Button
           mode="contained"
           disabled={cartCount === 0}
-          onPress={() => setCheckoutOpen(true)}
+          onPress={handleOpenCheckout}
           contentStyle={styles.checkoutContent}
         >
           Checkout
         </Button>
       </View>
 
-      <FractionPickerSheet
-        open={fractionItemId !== null}
-        itemName={items.find((it) => it.id === fractionItemId)?.name}
+      <ItemQuantitySheet
+        open={quantitySheetItemId !== null}
+        item={items.find((it) => it.id === quantitySheetItemId) ?? null}
         currentQty={
-          fractionItemId !== null ? (qtyByItemId[fractionItemId] ?? 0) : 0
+          quantitySheetItemId !== null
+            ? (qtyByItemId[quantitySheetItemId] ?? 0)
+            : 0
         }
-        onSelect={(decimal) => {
-          if (fractionItemId !== null) {
-            const whole = Math.floor(qtyByItemId[fractionItemId] ?? 0);
-            setQty(fractionItemId, whole + decimal);
+        onApply={(qty) => {
+          if (quantitySheetItemId !== null) {
+            setQty(quantitySheetItemId, qty);
           }
         }}
-        onDismiss={() => setFractionItemId(null)}
+        onDismiss={() => setQuantitySheetItemId(null)}
       />
 
       <CheckoutBottomSheet
@@ -268,6 +288,7 @@ export default function CartScreen() {
         selectedModeId={resolvedModeId}
         onModeChange={setSelectedModeId}
         onPay={handlePay}
+        payDisabled={isPaying}
         onDismiss={() => setCheckoutOpen(false)}
       />
     </View>

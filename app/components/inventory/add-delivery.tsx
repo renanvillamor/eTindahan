@@ -1,4 +1,4 @@
-import FractionPickerSheet from "@/app/components/shared/FractionPickerSheet";
+import ItemQuantitySheet from "@/app/components/shared/ItemQuantitySheet";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { useSnackbar } from "@/lib/SnackbarContext";
 import { formatCurrency } from "@/lib/utils";
@@ -38,7 +38,9 @@ export default function AddDeliveryScreen() {
   const [query, setQuery] = useState("");
   const [selectedSupplier, setSelectedSupplier] = useState<number | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [fractionItemId, setFractionItemId] = useState<number | null>(null);
+  const [quantitySheetItemId, setQuantitySheetItemId] = useState<
+    number | null
+  >(null);
 
   const chipScrollRef = useRef<ScrollView>(null);
   const [chipScrollInfo, setChipScrollInfo] = useState({
@@ -314,12 +316,12 @@ export default function AddDeliveryScreen() {
                         styles.fracButton,
                         { borderColor: colors.primary },
                       ]}
-                      onPress={() => setFractionItemId(item.id)}
+                      onPress={() => setQuantitySheetItemId(item.id)}
                     >
                       <Text
                         style={[styles.fracGlyph, { color: colors.primary }]}
                       >
-                        ½
+                        ⋯
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -330,19 +332,27 @@ export default function AddDeliveryScreen() {
         />
       </View>
 
-      <FractionPickerSheet
-        open={fractionItemId !== null}
-        itemName={items.find((it) => it.id === fractionItemId)?.name}
+      <ItemQuantitySheet
+        open={quantitySheetItemId !== null}
+        item={items.find((it) => it.id === quantitySheetItemId) ?? null}
         currentQty={
-          fractionItemId !== null ? (qtyByItemId[fractionItemId] ?? 0) : 0
+          quantitySheetItemId !== null
+            ? (qtyByItemId[quantitySheetItemId] ?? 0)
+            : 0
         }
-        onSelect={(decimal) => {
-          if (fractionItemId !== null) {
-            const whole = Math.floor(qtyByItemId[fractionItemId] ?? 0);
-            setQty(fractionItemId, whole + decimal);
+        amountPrice={
+          items.find((it) => it.id === quantitySheetItemId)?.supplierPrice
+        }
+        qtyUnitLabel={
+          items.find((it) => it.id === quantitySheetItemId)?.packUom
+        }
+        priceLabel="supplier price"
+        onApply={(qty) => {
+          if (quantitySheetItemId !== null) {
+            setQty(quantitySheetItemId, qty);
           }
         }}
-        onDismiss={() => setFractionItemId(null)}
+        onDismiss={() => setQuantitySheetItemId(null)}
       />
 
       <DeliverySummaryBottomSheet

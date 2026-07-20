@@ -11,7 +11,7 @@ import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { format, isSameDay, isValid, parseISO } from "date-fns";
+import { format, isValid, parseISO } from "date-fns";
 import { router, Stack, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -27,22 +27,12 @@ import ExpenseDetailsBottomSheet from "./ExpenseDetailsBottomSheet";
 
 type ExpenseGroup = {
   key: string;
-  createdAt: string | null;
+  sourceDate: string | null;
   payeeId: number | null;
   payeeName: string | null;
   totalAmount: number;
   expenses: Expense[];
 };
-
-function formatDateTimeLabel(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    const dt = parseISO(iso);
-    return isValid(dt) ? format(dt, "MMM d, yyyy  h:mm a") : "—";
-  } catch {
-    return "—";
-  }
-}
 
 function formatDateLabel(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -71,7 +61,7 @@ function ExpenseGroupRow({
           {group.payeeName ?? "No payee"}
         </Text>
         <Text className="text-sm text-gray-700 text-right">
-          {formatDateTimeLabel(group.createdAt)}
+          {formatDateLabel(group.sourceDate)}
         </Text>
       </View>
 
@@ -159,15 +149,14 @@ export default function ExpensesScreen() {
     }, [syncExpenses]),
   );
 
+  // Filter/group by sourceDate (the date the user attributes the expense
+  // to), not createdAt (when the row was inserted) — every other screen
+  // that totals expenses by day (Dashboard, Daily Summary, Financial
+  // Standing) already keys off source_date, so this must match or the same
+  // expense can show under different days on different screens.
   const filtered = useMemo(() => {
-    return expenses.filter((e) => {
-      if (!e.createdAt) return false;
-      try {
-        return isSameDay(parseISO(e.createdAt), selectedDate);
-      } catch {
-        return false;
-      }
-    });
+    const selectedStr = format(selectedDate, "yyyy-MM-dd");
+    return expenses.filter((e) => e.sourceDate?.slice(0, 10) === selectedStr);
   }, [expenses, selectedDate]);
 
   const totalAmount = useMemo(
@@ -179,9 +168,9 @@ export default function ExpensesScreen() {
     const groups = new Map<string, ExpenseGroup>();
 
     for (const expense of filtered) {
-      const createdAt = expense.createdAt ?? null;
+      const sourceDate = expense.sourceDate ?? null;
       const payeeId = expense.payeeId ?? null;
-      const key = `${createdAt ?? "no-date"}::${payeeId ?? "no-payee"}`;
+      const key = `${sourceDate ?? "no-date"}::${payeeId ?? "no-payee"}`;
       const existing = groups.get(key);
 
       if (existing) {
@@ -192,7 +181,7 @@ export default function ExpensesScreen() {
 
       groups.set(key, {
         key,
-        createdAt,
+        sourceDate,
         payeeId,
         payeeName: expense.payeeName ?? null,
         totalAmount: Number(expense.amount ?? 0),

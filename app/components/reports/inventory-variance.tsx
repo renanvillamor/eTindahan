@@ -3,14 +3,24 @@ import SearchFilterBar, {
   SortOption,
 } from "@/app/components/shared/SearchFilterBar";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { useSnackbar } from "@/lib/SnackbarContext";
 import { Supplier } from "@/models/Supplier";
+import { useReconcileInventory } from "@/services/useReconcileInventory";
 import { useGetInventoryVariance } from "@/services/useGetInventoryVariance";
 import { useStore } from "@/store/useStore";
 import { format } from "date-fns";
 import { router, Stack } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
-import { Divider, Icon, IconButton, Text } from "react-native-paper";
+import {
+  Button,
+  Dialog,
+  Divider,
+  Icon,
+  IconButton,
+  Portal,
+  Text,
+} from "react-native-paper";
 
 const NAME_COL_WIDTH = 150;
 const VAL_COL_WIDTH = 90;
@@ -80,12 +90,14 @@ function fmtQty(val: number | null): string {
 
 export default function InventoryVarianceReport() {
   const { colors } = useAppTheme();
+  const { showSnackbar } = useSnackbar();
   const storeItems = useStore((s) => s.items);
   const suppliers = useStore((s) => s.suppliers);
   const supplierItems = useStore((s) => s.supplierItems);
 
   const [date, setDate] = useState(new Date());
   const dateStr = format(date, "yyyy-MM-dd");
+  const [confirmVisible, setConfirmVisible] = useState(false);
 
   const {
     data: rawData,
@@ -93,6 +105,37 @@ export default function InventoryVarianceReport() {
     isFetching,
     refetch,
   } = useGetInventoryVariance(dateStr);
+
+  const { mutateAsync: reconcileInventory, isPending: isReconciling } =
+    useReconcileInventory();
+
+  // Only counted rows can be reconciled — a row without an actual_qty means
+  // the item was listed but never physically counted that day.
+  const countedRows = useMemo(
+    () => (rawData ?? []).filter((row) => row.actualQty != null),
+    [rawData],
+  );
+  const varianceCount = countedRows.filter(
+    (row) => (row.actualQty as number) !== row.qtyOnHand,
+  ).length;
+
+  const handleReconcile = async () => {
+    setConfirmVisible(false);
+    try {
+      await reconcileInventory(
+        countedRows.map((row) => ({
+          id: row.id,
+          actualQty: row.actualQty as number,
+        })),
+      );
+      showSnackbar(
+        `Reconciled inventory for ${format(date, "MMM d, yyyy")} (${countedRows.length} item${countedRows.length === 1 ? "" : "s"}).`,
+        "success",
+      );
+    } catch (e: any) {
+      showSnackbar(e?.message ?? "Failed to reconcile inventory", "error");
+    }
+  };
 
   // Build reverse map: itemId → supplierId[]
   const itemSupplierMap = useMemo(() => {
@@ -367,7 +410,50 @@ export default function InventoryVarianceReport() {
             );
           }}
         </SearchFilterBar>
+
+        {countedRows.length > 0 && (
+          <View className="px-4 py-3 border-t border-gray-100 bg-white flex-row items-center gap-3">
+            <Text className="flex-1 text-xs text-gray-500">
+              {countedRows.length} item{countedRows.length === 1 ? "" : "s"}{" "}
+              counted
+              {varianceCount > 0
+                ? ` • ${varianceCount} with variance`
+                : ""}
+            </Text>
+            <Button
+              mode="contained"
+              onPress={() => setConfirmVisible(true)}
+              loading={isReconciling}
+              disabled={isReconciling || isFetching}
+              compact
+            >
+              Reconcile
+            </Button>
+          </View>
+        )}
       </View>
+
+      <Portal>
+        <Dialog
+          visible={confirmVisible}
+          onDismiss={() => setConfirmVisible(false)}
+        >
+          <Dialog.Title>Reconcile Inventory?</Dialog.Title>
+          <Dialog.Content>
+            <Text className="text-sm text-gray-700 leading-5">
+              This will set the system on-hand quantity to match the physical
+              count for {countedRows.length} item
+              {countedRows.length === 1 ? "" : "s"} on{" "}
+              {format(date, "MMMM d, yyyy")}. Any variance shown above will be
+              cleared and cannot be recovered.
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setConfirmVisible(false)}>Cancel</Button>
+            <Button onPress={handleReconcile}>Reconcile</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </>
   );
 }

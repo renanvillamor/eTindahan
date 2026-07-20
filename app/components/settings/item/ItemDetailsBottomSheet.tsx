@@ -119,6 +119,9 @@ export default function ItemDetailsBottomSheet({
         : [];
       setSelectedSupplierIds(initialSupplierIds);
 
+      const packUom = uoms.find((u) => u.id === item?.packUomId);
+      const singleUom = uoms.find((u) => u.id === item?.singleUomId);
+
       reset({
         name: item?.name ?? "",
         description: item?.description ?? "",
@@ -129,9 +132,13 @@ export default function ItemDetailsBottomSheet({
         wholesalePrice: item ? item.wholesalePrice.toFixed(2) : "0.00",
         retailPrice: item ? item.retailPrice.toFixed(2) : "0.00",
         packUomId: item?.packUomId ?? 0,
-        packUomName: item?.packUom ?? "",
+        packUomName: packUom
+          ? `${packUom.displayLabel ?? packUom.name} - ${packUom.description}`
+          : "",
         singleUomId: item?.singleUomId ?? 0,
-        singleUomName: item?.singleUom ?? "",
+        singleUomName: singleUom
+          ? `${singleUom.displayLabel ?? singleUom.name} - ${singleUom.description}`
+          : "",
         minThreshold:
           item?.minThreshold != null ? String(item.minThreshold) : "",
         maxThreshold:
@@ -140,7 +147,7 @@ export default function ItemDetailsBottomSheet({
       // Validate immediately so isValid reflects the reset values
       trigger();
     }
-  }, [open, item]);
+  }, [open, item, uoms]);
 
   useEffect(() => {
     if (open) {
@@ -205,325 +212,317 @@ export default function ItemDetailsBottomSheet({
         }
       }}
     >
-      <View style={styles.container}>
-        <BottomSheetScrollView
-          style={styles.content}
-          contentContainerStyle={styles.contentContainer}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Header: active toggle right */}
-          <View style={styles.headerRow}>
-            <View style={styles.activeToggle}>
-              <Text style={styles.switchLabel}>Active</Text>
-              <Controller
-                control={control}
-                name="isActive"
-                render={({ field: { value, onChange } }) => (
-                  <Switch value={value} onValueChange={onChange} />
-                )}
-              />
-            </View>
+      <BottomSheetScrollView
+        contentContainerStyle={styles.contentContainer}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator
+        persistentScrollbar
+        indicatorStyle="black"
+      >
+        {/* Header: active toggle right */}
+        <View style={styles.headerRow}>
+          <View style={styles.activeToggle}>
+            <Text style={styles.switchLabel}>Active</Text>
+            <Controller
+              control={control}
+              name="isActive"
+              render={({ field: { value, onChange } }) => (
+                <Switch value={value} onValueChange={onChange} />
+              )}
+            />
           </View>
+        </View>
 
-          {/* Name */}
-          <Controller
-            control={control}
-            name="name"
-            rules={{
-              validate: (v) => v.trim().length > 0 || "Item name is required",
-            }}
-            render={({
-              field: { value, onChange, onBlur },
-              fieldState: { error },
-            }) => (
-              <>
+        {/* Name */}
+        <Controller
+          control={control}
+          name="name"
+          rules={{
+            validate: (v) => v.trim().length > 0 || "Item name is required",
+          }}
+          render={({
+            field: { value, onChange, onBlur },
+            fieldState: { error },
+          }) => (
+            <>
+              <TextInput
+                label="Item Name"
+                value={value || " "}
+                onChangeText={(text) => onChange(text.replace(/^ /, ""))}
+                onBlur={onBlur}
+                mode="outlined"
+                error={!!error}
+                style={styles.input}
+              />
+            </>
+          )}
+        />
+
+        {/* Description + Type */}
+        <View style={[styles.row, styles.rowMb]}>
+          <View style={styles.col}>
+            <Controller
+              control={control}
+              name="description"
+              render={({ field: { value, onChange } }) => (
                 <TextInput
-                  label="Item Name"
+                  label="Description"
                   value={value || " "}
                   onChangeText={(text) => onChange(text.replace(/^ /, ""))}
+                  mode="outlined"
+                />
+              )}
+            />
+          </View>
+          <View style={styles.col}>
+            <Controller
+              control={control}
+              name="typeId"
+              rules={{ validate: (v) => v > 0 || "Type is required" }}
+              render={({ field: { onChange }, fieldState: { error } }) => (
+                <>
+                  <OptionSelectSheet
+                    label="Type"
+                    value={watch("typeName")}
+                    options={itemTypeOptions}
+                    onSelect={(opt) => {
+                      onChange(opt.id);
+                      setValue("typeName", opt.label);
+                    }}
+                    error={!!error}
+                  />
+                </>
+              )}
+            />
+          </View>
+        </View>
+
+        {/* Prices — 2 columns */}
+        <Text style={styles.sectionLabel}>Prices</Text>
+        <View style={styles.row}>
+          <View style={styles.col}>
+            <Controller
+              control={control}
+              name="supplierPrice"
+              rules={{
+                required: "Required",
+                validate: (v) => !isNaN(Number(v)) || "Invalid",
+              }}
+              render={({
+                field: { value, onChange, onBlur },
+                fieldState: { error },
+              }) => (
+                <>
+                  <TextInput
+                    label="Supplier"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    keyboardType="numeric"
+                    mode="outlined"
+                    error={!!error}
+                    placeholder="0.00"
+                    left={<TextInput.Affix text="₱" />}
+                  />
+                </>
+              )}
+            />
+          </View>
+          <View style={styles.col}>
+            <Controller
+              control={control}
+              name="wholesalePrice"
+              rules={{
+                required: "Required",
+                validate: (v) => !isNaN(Number(v)) || "Invalid",
+              }}
+              render={({
+                field: { value, onChange, onBlur },
+                fieldState: { error },
+              }) => (
+                <>
+                  <TextInput
+                    label="Wholesale"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    keyboardType="numeric"
+                    mode="outlined"
+                    error={!!error}
+                    placeholder="0.00"
+                    left={<TextInput.Affix text="₱" />}
+                  />
+                </>
+              )}
+            />
+          </View>
+        </View>
+
+        <View style={[styles.row, styles.rowMt]}>
+          <View style={styles.col}>
+            <Controller
+              control={control}
+              name="retailPrice"
+              rules={{
+                required: "Required",
+                validate: (v) => !isNaN(Number(v)) || "Invalid",
+              }}
+              render={({
+                field: { value, onChange, onBlur },
+                fieldState: { error },
+              }) => (
+                <>
+                  <TextInput
+                    label="Retail"
+                    value={value}
+                    onChangeText={onChange}
+                    onBlur={onBlur}
+                    keyboardType="numeric"
+                    mode="outlined"
+                    error={!!error}
+                    placeholder="0.00"
+                    left={<TextInput.Affix text="₱" />}
+                  />
+                </>
+              )}
+            />
+          </View>
+          <View style={styles.col} />
+        </View>
+
+        {/* UOMs — stacked rows for full width */}
+        <Text style={styles.sectionLabel}>Unit of Measure</Text>
+        <Controller
+          control={control}
+          name="packUomId"
+          rules={{ validate: (v) => v > 0 || "Required" }}
+          render={({ field: { onChange }, fieldState: { error } }) => (
+            <View style={styles.input}>
+              <OptionSelectSheet
+                label="Pack UOM"
+                value={watch("packUomName")}
+                options={uomOptions}
+                onSelect={(opt) => {
+                  onChange(opt.id);
+                  setValue("packUomName", opt.label);
+                }}
+                error={!!error}
+              />
+            </View>
+          )}
+        />
+        <Controller
+          control={control}
+          name="singleUomId"
+          rules={{ validate: (v) => v > 0 || "Required" }}
+          render={({ field: { onChange }, fieldState: { error } }) => (
+            <OptionSelectSheet
+              label="Single UOM"
+              value={watch("singleUomName")}
+              options={uomOptions}
+              onSelect={(opt) => {
+                onChange(opt.id);
+                setValue("singleUomName", opt.label);
+              }}
+              error={!!error}
+            />
+          )}
+        />
+
+        {/* Suppliers */}
+        <Text style={styles.sectionLabel}>Suppliers</Text>
+        <View style={styles.chipsRow}>
+          {suppliers.map((s) => (
+            <Chip
+              key={s.id}
+              selected={selectedSupplierIds.includes(s.id)}
+              onPress={() => toggleSupplier(s.id)}
+              showSelectedCheck
+              compact
+              style={styles.chip}
+            >
+              {s.name}
+            </Chip>
+          ))}
+        </View>
+
+        {/* Thresholds — 2 columns */}
+        <Text style={styles.sectionLabel}>Stock Thresholds</Text>
+        <View style={styles.row}>
+          <View style={styles.col}>
+            <Controller
+              control={control}
+              name="minThreshold"
+              rules={{
+                validate: (v) =>
+                  v === "" ||
+                  (!isNaN(Number(v)) && Number(v) >= 0) ||
+                  "Invalid",
+              }}
+              render={({
+                field: { value, onChange, onBlur },
+                fieldState: { error },
+              }) => (
+                <TextInput
+                  label="Min (Reorder)"
+                  value={value}
+                  onChangeText={onChange}
                   onBlur={onBlur}
+                  keyboardType="numeric"
                   mode="outlined"
                   error={!!error}
-                  style={styles.input}
+                  placeholder="Optional"
                 />
-              </>
-            )}
-          />
-
-          {/* Description + Type */}
-          <View style={[styles.row, styles.rowMb]}>
-            <View style={styles.col}>
-              <Controller
-                control={control}
-                name="description"
-                render={({ field: { value, onChange } }) => (
-                  <TextInput
-                    label="Description"
-                    value={value || " "}
-                    onChangeText={(text) => onChange(text.replace(/^ /, ""))}
-                    mode="outlined"
-                  />
-                )}
-              />
-            </View>
-            <View style={styles.col}>
-              <Controller
-                control={control}
-                name="typeId"
-                rules={{ validate: (v) => v > 0 || "Type is required" }}
-                render={({ field: { onChange }, fieldState: { error } }) => (
-                  <>
-                    <OptionSelectSheet
-                      label="Type"
-                      value={watch("typeName")}
-                      options={itemTypeOptions}
-                      onSelect={(opt) => {
-                        onChange(opt.id);
-                        setValue("typeName", opt.label);
-                      }}
-                      error={!!error}
-                    />
-                  </>
-                )}
-              />
-            </View>
+              )}
+            />
           </View>
-
-          {/* Prices — 2 columns */}
-          <Text style={styles.sectionLabel}>Prices</Text>
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Controller
-                control={control}
-                name="supplierPrice"
-                rules={{
-                  required: "Required",
-                  validate: (v) => !isNaN(Number(v)) || "Invalid",
-                }}
-                render={({
-                  field: { value, onChange, onBlur },
-                  fieldState: { error },
-                }) => (
-                  <>
-                    <TextInput
-                      label="Supplier"
-                      value={value}
-                      onChangeText={onChange}
-                      onBlur={onBlur}
-                      keyboardType="numeric"
-                      mode="outlined"
-                      error={!!error}
-                      placeholder="0.00"
-                      left={<TextInput.Affix text="₱" />}
-                    />
-                  </>
-                )}
-              />
-            </View>
-            <View style={styles.col}>
-              <Controller
-                control={control}
-                name="wholesalePrice"
-                rules={{
-                  required: "Required",
-                  validate: (v) => !isNaN(Number(v)) || "Invalid",
-                }}
-                render={({
-                  field: { value, onChange, onBlur },
-                  fieldState: { error },
-                }) => (
-                  <>
-                    <TextInput
-                      label="Wholesale"
-                      value={value}
-                      onChangeText={onChange}
-                      onBlur={onBlur}
-                      keyboardType="numeric"
-                      mode="outlined"
-                      error={!!error}
-                      placeholder="0.00"
-                      left={<TextInput.Affix text="₱" />}
-                    />
-                  </>
-                )}
-              />
-            </View>
+          <View style={styles.col}>
+            <Controller
+              control={control}
+              name="maxThreshold"
+              rules={{
+                validate: (v) =>
+                  v === "" ||
+                  (!isNaN(Number(v)) && Number(v) >= 0) ||
+                  "Invalid",
+              }}
+              render={({
+                field: { value, onChange, onBlur },
+                fieldState: { error },
+              }) => (
+                <TextInput
+                  label="Max (Overstock)"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  keyboardType="numeric"
+                  mode="outlined"
+                  error={!!error}
+                  placeholder="Optional"
+                />
+              )}
+            />
           </View>
+        </View>
 
-          <View style={[styles.row, styles.rowMt]}>
-            <View style={styles.col}>
-              <Controller
-                control={control}
-                name="retailPrice"
-                rules={{
-                  required: "Required",
-                  validate: (v) => !isNaN(Number(v)) || "Invalid",
-                }}
-                render={({
-                  field: { value, onChange, onBlur },
-                  fieldState: { error },
-                }) => (
-                  <>
-                    <TextInput
-                      label="Retail"
-                      value={value}
-                      onChangeText={onChange}
-                      onBlur={onBlur}
-                      keyboardType="numeric"
-                      mode="outlined"
-                      error={!!error}
-                      placeholder="0.00"
-                      left={<TextInput.Affix text="₱" />}
-                    />
-                  </>
-                )}
-              />
-            </View>
-            <View style={styles.col} />
-          </View>
-
-          {/* UOMs — 2 columns */}
-          <Text style={styles.sectionLabel}>Unit of Measure</Text>
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Controller
-                control={control}
-                name="packUomId"
-                rules={{ validate: (v) => v > 0 || "Required" }}
-                render={({ field: { onChange }, fieldState: { error } }) => (
-                  <>
-                    <OptionSelectSheet
-                      label="Pack UOM"
-                      value={watch("packUomName")}
-                      options={uomOptions}
-                      onSelect={(opt) => {
-                        onChange(opt.id);
-                        setValue("packUomName", opt.label);
-                      }}
-                      error={!!error}
-                    />
-                  </>
-                )}
-              />
-            </View>
-            <View style={styles.col}>
-              <Controller
-                control={control}
-                name="singleUomId"
-                rules={{ validate: (v) => v > 0 || "Required" }}
-                render={({ field: { onChange }, fieldState: { error } }) => (
-                  <>
-                    <OptionSelectSheet
-                      label="Single UOM"
-                      value={watch("singleUomName")}
-                      options={uomOptions}
-                      onSelect={(opt) => {
-                        onChange(opt.id);
-                        setValue("singleUomName", opt.label);
-                      }}
-                      error={!!error}
-                    />
-                  </>
-                )}
-              />
-            </View>
-          </View>
-
-          {/* Suppliers */}
-          <Text style={styles.sectionLabel}>Suppliers</Text>
-          <View style={styles.chipsRow}>
-            {suppliers.map((s) => (
-              <Chip
-                key={s.id}
-                selected={selectedSupplierIds.includes(s.id)}
-                onPress={() => toggleSupplier(s.id)}
-                showSelectedCheck
-                compact
-                style={styles.chip}
-              >
-                {s.name}
-              </Chip>
-            ))}
-          </View>
-
-          {/* Thresholds — 2 columns */}
-          <Text style={styles.sectionLabel}>Stock Thresholds</Text>
-          <View style={styles.row}>
-            <View style={styles.col}>
-              <Controller
-                control={control}
-                name="minThreshold"
-                rules={{
-                  validate: (v) =>
-                    v === "" ||
-                    (!isNaN(Number(v)) && Number(v) >= 0) ||
-                    "Invalid",
-                }}
-                render={({
-                  field: { value, onChange, onBlur },
-                  fieldState: { error },
-                }) => (
-                  <TextInput
-                    label="Min (Reorder)"
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    keyboardType="numeric"
-                    mode="outlined"
-                    error={!!error}
-                    placeholder="Optional"
-                  />
-                )}
-              />
-            </View>
-            <View style={styles.col}>
-              <Controller
-                control={control}
-                name="maxThreshold"
-                rules={{
-                  validate: (v) =>
-                    v === "" ||
-                    (!isNaN(Number(v)) && Number(v) >= 0) ||
-                    "Invalid",
-                }}
-                render={({
-                  field: { value, onChange, onBlur },
-                  fieldState: { error },
-                }) => (
-                  <TextInput
-                    label="Max (Overstock)"
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    keyboardType="numeric"
-                    mode="outlined"
-                    error={!!error}
-                    placeholder="Optional"
-                  />
-                )}
-              />
-            </View>
-          </View>
-
-          <View style={styles.footer}>
-            <Button
-              mode="contained"
-              onPress={handleSubmit(onSubmit)}
-              disabled={!isValid || isLoading}
-              loading={isLoading}
-            >
-              {isAddMode ? "Add Item" : "Save Changes"}
-            </Button>
-            <Button
-              onPress={onDismiss}
-              disabled={isLoading}
-              style={styles.cancelButton}
-            >
-              Cancel
-            </Button>
-          </View>
-        </BottomSheetScrollView>
-      </View>
+        <View style={styles.footer}>
+          <Button
+            mode="contained"
+            onPress={handleSubmit(onSubmit)}
+            disabled={!isValid || isLoading}
+            loading={isLoading}
+          >
+            {isAddMode ? "Add Item" : "Save Changes"}
+          </Button>
+          <Button
+            onPress={onDismiss}
+            disabled={isLoading}
+            style={styles.cancelButton}
+          >
+            Cancel
+          </Button>
+        </View>
+      </BottomSheetScrollView>
     </BottomSheet>
   );
 }
@@ -533,12 +532,6 @@ const useStyles = (colors: any) =>
     sheetBackground: {
       borderTopWidth: 1,
       borderTopColor: colors.surfaceDisabled,
-    },
-    container: {
-      flex: 1,
-    },
-    content: {
-      flex: 1,
     },
     contentContainer: {
       paddingHorizontal: 16,

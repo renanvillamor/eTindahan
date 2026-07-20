@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabaseClient";
+import { localDayToUtcRange, toLocalDateStr } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 
 export type SalesReportRow = {
@@ -11,11 +12,14 @@ async function fetchSalesReport(
   fromDate: string,
   toDate: string,
 ): Promise<SalesReportRow[]> {
+  const { startUtc } = localDayToUtcRange(fromDate);
+  const { endUtc } = localDayToUtcRange(toDate);
+
   const { data, error } = await supabase
     .from("sale")
     .select("item_id, transaction_date, quantity")
-    .gte("transaction_date", fromDate)
-    .lte("transaction_date", toDate + "T23:59:59");
+    .gte("transaction_date", startUtc)
+    .lte("transaction_date", endUtc);
 
   if (error) throw new Error(error.message);
   if (!data) return [];
@@ -23,7 +27,7 @@ async function fetchSalesReport(
   // Aggregate total qty sold per item per date
   const agg: Record<string, SalesReportRow> = {};
   for (const row of data) {
-    const date = String(row.transaction_date).slice(0, 10);
+    const date = toLocalDateStr(row.transaction_date);
     const itemId = Number(row.item_id);
     const key = `${itemId}_${date}`;
     if (!agg[key]) {

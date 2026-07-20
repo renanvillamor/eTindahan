@@ -22,7 +22,13 @@ const NetworkContext = createContext<NetworkContextValue>({
 
 export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(true);
-  const wasConnected = useRef(true);
+  // Starts false (not true) so the very first NetInfo callback — which
+  // fires immediately with the current connectivity state — is treated as
+  // a "just came online" transition when the app launches already
+  // connected. Otherwise offline sales/deletions from a crashed or
+  // force-quit session sit unsynced forever unless the user happens to
+  // toggle connectivity or open Settings → Sync Data manually.
+  const wasConnected = useRef(false);
   const isSyncing = useRef(false);
 
   const queryClient = useQueryClient();

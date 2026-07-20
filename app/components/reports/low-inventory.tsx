@@ -2,9 +2,12 @@ import SearchFilterBar, {
   SortOption,
 } from "@/app/components/shared/SearchFilterBar";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { useInventoryActivity } from "@/hooks/useInventoryActivity";
 import { Inventory } from "@/models/Inventory";
 import { Supplier } from "@/models/Supplier";
+import { useGetDeliveries } from "@/services/useGetDeliveries";
 import { useGetInventories } from "@/services/useGetInventories";
+import { useGetSalesToday } from "@/services/useGetSalesToday";
 import { useStore } from "@/store/useStore";
 import { router, Stack } from "expo-router";
 import { useMemo } from "react";
@@ -79,41 +82,16 @@ export default function LowInventoryReport() {
 
   const inventories = useStore((s) => s.inventories);
   const items = useStore((s) => s.items);
-  const salesToday = useStore((s) => s.salesToday);
-  const deliveries = useStore((s) => s.deliveries);
   const suppliers = useStore((s) => s.suppliers);
   const supplierItems = useStore((s) => s.supplierItems);
 
   const { refetch, isFetching } = useGetInventories();
-
-  // itemId → packSize
-  const packSizeByItemId = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const inv of inventories) {
-      map[inv.itemId] = inv.packSize && inv.packSize > 0 ? inv.packSize : 1;
-    }
-    return map;
-  }, [inventories]);
-
-  // itemId → sold today (in pack UOM)
-  const soldTodayByItemId = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const s of salesToday) {
-      const packSize = packSizeByItemId[s.itemId] ?? 1;
-      map[s.itemId] = (map[s.itemId] ?? 0) + s.quantity / packSize;
-    }
-    return map;
-  }, [salesToday, packSizeByItemId]);
-
-  // itemId → delivered today (in pack UOM)
-  const deliveredTodayByItemId = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const d of deliveries) {
-      if (d.itemId == null) continue;
-      map[d.itemId] = (map[d.itemId] ?? 0) + d.quantity;
-    }
-    return map;
-  }, [deliveries]);
+  // On-hand math (useInventoryActivity) needs today's sales/deliveries in the
+  // store — without these, a user landing here without first visiting Home
+  // or Add Delivery would see on-hand figures missing today's activity.
+  useGetSalesToday();
+  useGetDeliveries();
+  const activityByItemId = useInventoryActivity();
 
   // itemId → minThreshold (from items store)
   const minThresholdByItemId = useMemo(() => {
@@ -142,10 +120,7 @@ export default function LowInventoryReport() {
     for (const inv of inventories) {
       const minThreshold = minThresholdByItemId[inv.itemId];
       if (minThreshold == null) continue;
-      const onHand =
-        (inv.actualQty ?? 0) +
-        (deliveredTodayByItemId[inv.itemId] ?? 0) -
-        (soldTodayByItemId[inv.itemId] ?? 0);
+      const onHand = activityByItemId[inv.itemId]?.onHand ?? inv.actualQty ?? 0;
       if (onHand <= minThreshold) {
         rows.push({
           inventory: inv,
@@ -155,12 +130,7 @@ export default function LowInventoryReport() {
       }
     }
     return rows;
-  }, [
-    inventories,
-    minThresholdByItemId,
-    deliveredTodayByItemId,
-    soldTodayByItemId,
-  ]);
+  }, [inventories, minThresholdByItemId, activityByItemId]);
 
   return (
     <>
@@ -286,7 +256,7 @@ export default function LowInventoryReport() {
                   <Text className="flex-1 text-xs font-semibold text-gray-400 uppercase">
                     {""}
                   </Text>
-                  <Text className="w-20 text-xs font-semibold text-gray-400 text-center uppercase">
+                  <Text className="w-28 pl-2 pr-4 text-xs font-semibold text-gray-400 text-left uppercase">
                     Qty On Hand
                   </Text>
                 </View>
@@ -316,22 +286,23 @@ export default function LowInventoryReport() {
                         titleNumberOfLines={1}
                         style={styles.listItem}
                         right={() => (
-                          <View className="flex-row items-center pr-2">
-                            <View className="w-20 items-center">
-                              <Text
-                                style={[
-                                  styles.qtyValue,
-                                  { color: isOut ? "#dc2626" : "#ea580c" },
-                                ]}
-                              >
-                                {fmtQty(row.onHand)}
-                              </Text>
+                          <View className="w-28 pl-2 pr-4">
+                            <Text
+                              numberOfLines={1}
+                              adjustsFontSizeToFit
+                              style={[
+                                styles.qtyValue,
+                                { color: isOut ? "#dc2626" : "#ea580c" },
+                              ]}
+                            >
+                              {fmtQty(row.onHand)}
                               {row.inventory.uom ? (
-                                <Text style={styles.uomLabel}>
+                                <Text style={styles.uomInline}>
+                                  {" "}
                                   {row.inventory.uom}/s
                                 </Text>
                               ) : null}
-                            </View>
+                            </Text>
                           </View>
                         )}
                       />
@@ -349,21 +320,21 @@ export default function LowInventoryReport() {
 
 const styles = StyleSheet.create({
   listItem: {
-    paddingVertical: 10,
+    paddingVertical: 4,
     paddingHorizontal: 0,
+    minHeight: 0,
   },
   outTitle: {
     color: "#dc2626",
   },
   qtyValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
-    textAlign: "center",
+    textAlign: "left",
   },
-  uomLabel: {
-    fontSize: 10,
+  uomInline: {
+    fontSize: 12,
+    fontWeight: "400",
     color: "#9ca3af",
-    textAlign: "center",
-    marginTop: 1,
   },
 });

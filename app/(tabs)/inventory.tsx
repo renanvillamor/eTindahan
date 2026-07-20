@@ -1,9 +1,12 @@
 import SearchFilterBar from "@/app/components/shared/SearchFilterBar";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { useInventoryActivity } from "@/hooks/useInventoryActivity";
 import useSafePush from "@/lib/useSafePush";
 import { Inventory } from "@/models/Inventory";
 import { Supplier } from "@/models/Supplier";
+import { useGetDeliveries } from "@/services/useGetDeliveries";
 import { useGetInventories } from "@/services/useGetInventories";
+import { useGetSalesToday } from "@/services/useGetSalesToday";
 import React, { memo, useMemo } from "react";
 import {
   RefreshControl,
@@ -64,17 +67,18 @@ function buildSupplierSections<T>(
 
 type InventoryRowProps = {
   item: Inventory;
-  soldToday: number;
-  deliveredToday: number;
+  sold: number;
+  delivered: number;
+  onHand: number;
 };
 
 const InventoryRow = memo(function InventoryRow({
   item,
-  soldToday,
-  deliveredToday,
+  sold,
+  delivered,
+  onHand,
 }: InventoryRowProps) {
   const lastInv = item.actualQty ?? 0;
-  const onHand = lastInv + deliveredToday - soldToday;
   return (
     <List.Item
       title={item.name}
@@ -89,19 +93,19 @@ const InventoryRow = memo(function InventoryRow({
           </View>
           <View className="w-16 items-center">
             <Text className="text-sm font-medium text-green-600">
-              {deliveredToday > 0
-                ? Number.isInteger(deliveredToday)
-                  ? `+${deliveredToday}`
-                  : `+${deliveredToday.toFixed(2)}`
+              {delivered > 0
+                ? Number.isInteger(delivered)
+                  ? `+${delivered}`
+                  : `+${delivered.toFixed(2)}`
                 : "0"}
             </Text>
           </View>
           <View className="w-16 items-center">
             <Text className="text-sm font-medium text-gray-600">
-              {soldToday > 0
-                ? Number.isInteger(soldToday)
-                  ? `${soldToday}`
-                  : soldToday.toFixed(2)
+              {sold > 0
+                ? Number.isInteger(sold)
+                  ? `${sold}`
+                  : sold.toFixed(2)
                 : "0"}
             </Text>
           </View>
@@ -121,43 +125,17 @@ const invRowStyle = { paddingVertical: 12, paddingHorizontal: 0 };
 export default function InventoryScreen() {
   const { colors } = useAppTheme();
   const inventories = useStore((state) => state.inventories);
-  const salesToday = useStore((state) => state.salesToday);
-  const deliveries = useStore((state) => state.deliveries);
   const suppliers = useStore((s) => s.suppliers);
   const supplierItems = useStore((s) => s.supplierItems);
   const styles = useStyles(colors);
   const safePush = useSafePush();
   const { refetch, isFetching } = useGetInventories();
-
-  // itemId → packSize (how many singles make one pack), sourced directly from inventory fetch
-  const packSizeByItemId = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const inv of inventories) {
-      map[inv.itemId] = inv.packSize && inv.packSize > 0 ? inv.packSize : 1;
-    }
-    return map;
-  }, [inventories]);
-
-  // Map itemId → total qty sold today converted to pack UOM
-  const soldTodayByItemId = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const s of salesToday) {
-      const packSize = packSizeByItemId[s.itemId] ?? 1;
-      const soldInPacks = s.quantity / packSize;
-      map[s.itemId] = (map[s.itemId] ?? 0) + soldInPacks;
-    }
-    return map;
-  }, [salesToday, packSizeByItemId]);
-
-  // Map itemId → total qty delivered today (in pack UOM)
-  const deliveredTodayByItemId = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const d of deliveries) {
-      if (d.itemId == null) continue;
-      map[d.itemId] = (map[d.itemId] ?? 0) + d.quantity;
-    }
-    return map;
-  }, [deliveries]);
+  // On-hand math (useInventoryActivity) needs today's sales/deliveries in the
+  // store — without these, landing here without first visiting Home or Add
+  // Delivery would show on-hand figures missing today's activity.
+  useGetSalesToday();
+  useGetDeliveries();
+  const activityByItemId = useInventoryActivity();
 
   // Build reverse map: itemId → supplierId[]
   const itemSupplierMap = useMemo(() => {
@@ -202,14 +180,8 @@ export default function InventoryScreen() {
                 case "type":
                   return dir * (a.type ?? "").localeCompare(b.type ?? "");
                 case "quantity": {
-                  const aQty =
-                    (a.actualQty ?? 0) +
-                    (deliveredTodayByItemId[a.itemId] ?? 0) -
-                    (soldTodayByItemId[a.itemId] ?? 0);
-                  const bQty =
-                    (b.actualQty ?? 0) +
-                    (deliveredTodayByItemId[b.itemId] ?? 0) -
-                    (soldTodayByItemId[b.itemId] ?? 0);
+                  const aQty = activityByItemId[a.itemId]?.onHand ?? 0;
+                  const bQty = activityByItemId[b.itemId]?.onHand ?? 0;
                   return dir * (aQty - bQty);
                 }
                 default:
@@ -239,10 +211,10 @@ export default function InventoryScreen() {
                   LAST{"\n"}INVENTORY
                 </Text>
                 <Text className="w-16 text-xs font-semibold text-gray-400 text-center">
-                  DELIVERY{"\n"}TODAY
+                  DELIVERED{"\n"}SINCE
                 </Text>
                 <Text className="w-16 text-xs font-semibold text-gray-400 text-center">
-                  SOLD{"\n"}TODAY
+                  SOLD{"\n"}SINCE
                 </Text>
                 <Text className="w-16 text-xs font-semibold text-gray-400 text-center">
                   QTY ON{"\n"}HAND
@@ -265,13 +237,17 @@ export default function InventoryScreen() {
                     </Text>
                   </View>
                 )}
-                renderItem={({ item }) => (
-                  <InventoryRow
-                    item={item}
-                    soldToday={soldTodayByItemId[item.itemId] ?? 0}
-                    deliveredToday={deliveredTodayByItemId[item.itemId] ?? 0}
-                  />
-                )}
+                renderItem={({ item }) => {
+                  const activity = activityByItemId[item.itemId];
+                  return (
+                    <InventoryRow
+                      item={item}
+                      sold={activity?.sold ?? 0}
+                      delivered={activity?.delivered ?? 0}
+                      onHand={activity?.onHand ?? item.actualQty ?? 0}
+                    />
+                  );
+                }}
               />
             </View>
           );

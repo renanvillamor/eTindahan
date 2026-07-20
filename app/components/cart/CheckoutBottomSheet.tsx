@@ -23,6 +23,8 @@ type Props = {
   selectedModeId: number | null;
   onModeChange: (id: number) => void;
   onPay: () => void;
+  /** Disables the Pay button, e.g. while a payment is already being recorded. */
+  payDisabled?: boolean;
   onDismiss?: () => void;
 };
 
@@ -34,6 +36,7 @@ export default function CheckoutBottomSheet({
   selectedModeId,
   onModeChange,
   onPay,
+  payDisabled = false,
   onDismiss,
 }: Props) {
   const { colors } = useAppTheme();
@@ -169,6 +172,8 @@ export default function CheckoutBottomSheet({
           <Button
             mode="contained"
             onPress={onPay}
+            disabled={payDisabled}
+            loading={payDisabled}
             contentStyle={styles.payContent}
           >
             Pay

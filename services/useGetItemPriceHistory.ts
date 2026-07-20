@@ -1,3 +1,4 @@
+import { DEFAULT_STALE_TIME } from "@/lib/queryConfig";
 import { supabase } from "@/lib/supabaseClient";
 import { useQuery } from "@tanstack/react-query";
 
@@ -34,6 +35,6 @@ export function useGetItemPriceHistory(itemId: number | null) {
     queryKey: ["item-price-history", itemId],
     queryFn: () => fetchItemPriceHistory(itemId!),
     enabled: itemId != null && itemId > 0,
-    staleTime: 0,
+    staleTime: DEFAULT_STALE_TIME,
   });
 }

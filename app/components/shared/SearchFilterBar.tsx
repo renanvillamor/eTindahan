@@ -1,10 +1,10 @@
 import { useAppTheme } from "@/hooks/useAppTheme";
-import { useStore } from "@/store/useStore";
-import { ReactNode, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
-import { Chip, Icon, Searchbar } from "react-native-paper";
-import SortModal from "./SortModal";
 import { Supplier } from "@/models/Supplier";
+import { useStore } from "@/store/useStore";
+import { ReactNode, useMemo, useState } from "react";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { Chip, IconButton, Searchbar } from "react-native-paper";
+import SortModal from "./SortModal";
 
 export type SortDir = "asc" | "desc";
 
@@ -43,7 +43,20 @@ export default function SearchFilterBar({
 }: Props) {
   const { colors } = useAppTheme();
   const styles = useStyles(colors);
-  const itemTypes = useStore((s) => s.itemTypes) ?? [];
+  const rawItemTypes = useStore((s) => s.itemTypes) ?? [];
+
+  const itemTypes = useMemo(
+    () =>
+      [...rawItemTypes].sort((a, b) =>
+        a.description.localeCompare(b.description),
+      ),
+    [rawItemTypes],
+  );
+
+  const sortedSuppliers = useMemo(
+    () => [...suppliers].sort((a, b) => a.name.localeCompare(b.name)),
+    [suppliers],
+  );
 
   const [query, setQuery] = useState("");
   const [selectedType, setSelectedType] = useState<number | null>(null);
@@ -67,17 +80,34 @@ export default function SearchFilterBar({
     setSortModalOpen(false);
   };
 
-  const activeSortLabel = sortOptions.find((o) => o.key === sortKey)?.label;
-
-return (
+  return (
     <View className="flex-1">
       <View className="px-4">
-        <Searchbar
-          placeholder={placeholder}
-          value={query}
-          onChangeText={setQuery}
-          style={styles.searchbar}
-        />
+        <View className="flex-row items-center gap-2 mb-3">
+          <Searchbar
+            placeholder={placeholder}
+            value={query}
+            onChangeText={setQuery}
+            style={[styles.searchbar, { flex: 1, marginBottom: 0 }]}
+          />
+
+          <IconButton
+            icon={
+              sortKey
+                ? sortDir === "asc"
+                  ? "sort-ascending"
+                  : "sort-descending"
+                : "sort"
+            }
+            mode="outlined"
+            size={20}
+            iconColor={sortKey ? "white" : colors.onSurfaceVariant}
+            containerColor={sortKey ? colors.primary : undefined}
+            onPress={() => setSortModalOpen(true)}
+            style={styles.sortButton}
+            accessibilityLabel="Sort"
+          />
+        </View>
 
         <View className="flex-row items-center mb-3">
           <ScrollView
@@ -106,54 +136,40 @@ return (
                 {t.description}
               </Chip>
             ))}
-            {showSupplierFilter && suppliers.map((s) => (
-              <Chip
-                key={`supplier-${s.id}`}
-                mode="outlined"
-                selected={selectedSupplier === s.id}
-                showSelectedCheck={false}
-                onPress={() =>
-                  setSelectedSupplier(selectedSupplier === s.id ? null : s.id)
-                }
-                style={[
-                  styles.chip,
-                  selectedSupplier === s.id && styles.selectedChip,
-                ]}
-                textStyle={
-                  selectedSupplier === s.id ? styles.selectedText : undefined
-                }
-              >
-                {s.name}
-              </Chip>
-            ))}
           </ScrollView>
-
-          <View>
-            <Chip
-              icon={({ size }) => (
-                <Icon
-                  source={
-                    sortKey
-                      ? sortDir === "asc"
-                        ? "sort-ascending"
-                        : "sort-descending"
-                      : "sort"
-                  }
-                  size={size}
-                  color={sortKey ? "white" : colors.onSurfaceVariant}
-                />
-              )}
-              mode="outlined"
-              selected={!!sortKey}
-              showSelectedCheck={false}
-              onPress={() => setSortModalOpen(true)}
-              style={[styles.chip, sortKey ? styles.selectedChip : undefined]}
-              textStyle={sortKey ? styles.selectedText : undefined}
-            >
-              {activeSortLabel ?? "Sort"}
-            </Chip>
-          </View>
         </View>
+
+        {showSupplierFilter && sortedSuppliers.length > 0 && (
+          <View className="flex-row items-center mb-3">
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.chipsContent}
+              style={styles.chipsScroll}
+            >
+              {sortedSuppliers.map((s) => (
+                <Chip
+                  key={`supplier-${s.id}`}
+                  mode="outlined"
+                  selected={selectedSupplier === s.id}
+                  showSelectedCheck={false}
+                  onPress={() =>
+                    setSelectedSupplier(selectedSupplier === s.id ? null : s.id)
+                  }
+                  style={[
+                    styles.chip,
+                    selectedSupplier === s.id && styles.selectedChip,
+                  ]}
+                  textStyle={
+                    selectedSupplier === s.id ? styles.selectedText : undefined
+                  }
+                >
+                  {s.name}
+                </Chip>
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       <SortModal
@@ -187,6 +203,10 @@ const useStyles = (colors: any) =>
     chip: {
       marginRight: 8,
       borderRadius: 16,
+      borderColor: colors.surfaceDisabled,
+    },
+    sortButton: {
+      margin: 0,
       borderColor: colors.surfaceDisabled,
     },
     selectedChip: {

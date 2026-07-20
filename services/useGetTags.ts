@@ -1,11 +1,15 @@
+import { DEFAULT_STALE_TIME } from "@/lib/queryConfig";
 import { supabase } from "@/lib/supabaseClient";
 import { Tag } from "@/models/Tag";
 import { useQuery } from "@tanstack/react-query";
 
 async function fetchTags(tagType: string, reference: string): Promise<Tag[]> {
+  // getSession() reads the cached session locally; getUser() would hit the
+  // Supabase Auth server over the network for no benefit here.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return [];
 
   const { data, error } = await supabase
@@ -32,6 +36,6 @@ export function useGetTags(tagType: string, reference: string) {
     queryKey: ["tags", tagType, reference],
     queryFn: () => fetchTags(tagType, reference),
     enabled: !!tagType && !!reference,
-    staleTime: 0,
+    staleTime: DEFAULT_STALE_TIME,
   });
 }

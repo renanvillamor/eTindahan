@@ -1,6 +1,7 @@
-import FractionPickerSheet from "@/app/components/shared/FractionPickerSheet";
+import ItemQuantitySheet from "@/app/components/shared/ItemQuantitySheet";
 import SearchFilterBar from "@/app/components/shared/SearchFilterBar";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { useInventoryActivity } from "@/hooks/useInventoryActivity";
 import { useSnackbar } from "@/lib/SnackbarContext";
 import { Item } from "@/models/Item";
 import { Supplier } from "@/models/Supplier";
@@ -10,7 +11,7 @@ import { useGetSalesToday } from "@/services/useGetSalesToday";
 import { useSaveInventory } from "@/services/useSaveInventory";
 import { format } from "date-fns";
 import { router, Stack } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Text as RNText,
   TextInput as RNTextInput,
@@ -70,36 +71,29 @@ export default function AddInventoryScreen() {
   const { colors } = useAppTheme();
   const items = useStore((s) => s.items);
   const inventories = useStore((s) => s.inventories);
-  const salesToday = useStore((s) => s.salesToday);
-  const deliveries = useStore((s) => s.deliveries);
   const suppliers = useStore((s) => s.suppliers);
   const supplierItems = useStore((s) => s.supplierItems);
 
   const [qtyByItemId, setQtyByItemId] = useState<Record<number, number>>({});
-  const [fractionItemId, setFractionItemId] = useState<number | null>(null);
+  const [quantitySheetItemId, setQuantitySheetItemId] = useState<
+    number | null
+  >(null);
   const { showSnackbar } = useSnackbar();
 
   const today = new Date();
 
   const saveInventoryMutation = useSaveInventory();
 
-  // Ensure all required data is loaded when this screen mounts so that
-  // qty_on_hand is calculated correctly from real store values.
-  const { refetch: refetchInventories, isFetching: isFetchingInventories } =
-    useGetInventories();
-  const { refetch: refetchSalesToday, isFetching: isFetchingSales } =
-    useGetSalesToday();
-  const { isFetching: isFetchingDeliveries } = useGetDeliveries();
+  // These hooks already fetch on mount and write into the store on their
+  // own — no need for an extra imperative refetch on top. isLoading (not
+  // isFetching) so a background revalidation of already-cached data doesn't
+  // re-block the screen on every visit.
+  const { isLoading: isLoadingInventories } = useGetInventories();
+  const { isLoading: isLoadingSales } = useGetSalesToday();
+  const { isLoading: isLoadingDeliveries } = useGetDeliveries();
 
   const isLoading =
-    isFetchingInventories || isFetchingSales || isFetchingDeliveries;
-
-  useEffect(() => {
-    refetchInventories();
-    refetchSalesToday();
-    // useGetDeliveries auto-fetches on mount (no enabled:false), so no
-    // explicit refetch needed.
-  }, []);
+    isLoadingInventories || isLoadingSales || isLoadingDeliveries;
 
   // Build reverse map: itemId → supplierId[]
   const itemSupplierMap = useMemo(() => {
@@ -113,40 +107,16 @@ export default function AddInventoryScreen() {
     return map;
   }, [supplierItems]);
 
-  // itemId → packSize (how many singles make one pack)
-  const packSizeByItemId = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const inv of inventories) {
-      map[inv.itemId] = inv.packSize && inv.packSize > 0 ? inv.packSize : 1;
-    }
-    return map;
-  }, [inventories]);
-
-  // Map itemId → qty on hand (last actual count + delivered today − sold today)
+  // Map itemId → qty on hand (last actual count + delivered − sold since
+  // that count, covering any gap days where inventory wasn't counted).
+  const activityByItemId = useInventoryActivity();
   const onHandByItemId = useMemo(() => {
-    const soldMap: Record<number, number> = {};
-    for (const s of salesToday) {
-      const packSize = packSizeByItemId[s.itemId] ?? 1;
-      soldMap[s.itemId] = (soldMap[s.itemId] ?? 0) + s.quantity / packSize;
-    }
-    const deliveredMap: Record<number, number> = {};
-    for (const d of deliveries) {
-      if (d.itemId == null) continue;
-      deliveredMap[d.itemId] = (deliveredMap[d.itemId] ?? 0) + d.quantity;
-    }
-    // Build a quick lookup so we can cover ALL items, not just those with
-    // an existing inventory record (new items would otherwise default to 0).
-    const invByItemId = new Map(inventories.map((inv) => [inv.itemId, inv]));
     const map: Record<number, number> = {};
     for (const item of items) {
-      const inv = invByItemId.get(item.id);
-      map[item.id] =
-        (inv?.actualQty ?? 0) +
-        (deliveredMap[item.id] ?? 0) -
-        (soldMap[item.id] ?? 0);
+      map[item.id] = activityByItemId[item.id]?.onHand ?? 0;
     }
     return map;
-  }, [items, inventories, salesToday, deliveries, packSizeByItemId]);
+  }, [items, activityByItemId]);
 
   const dirtyEntries = useMemo(() => {
     return items.filter((it) => it.id in qtyByItemId);
@@ -171,14 +141,18 @@ export default function AddInventoryScreen() {
   );
 
   const handleSave = () => {
-    const missingUom = items.filter((it) => it.isActive && !it.packUomId);
+    // Only items the user actually entered a count for should be saved —
+    // otherwise every untouched item would get a false `actual_qty: 0` row,
+    // corrupting variance reports and resetting future on-hand baselines to
+    // zero for items that were never physically counted today.
+    const missingUom = dirtyEntries.filter((it) => it.isActive && !it.packUomId);
     if (missingUom.length > 0) {
       const names = missingUom.map((it) => it.name).join(", ");
       showSnackbar(`Items missing Pack UOM: ${names}`, "error");
       return;
     }
 
-    const entries = items
+    const entries = dirtyEntries
       .filter((it) => it.isActive)
       .map((item) => ({
         item_id: item.id,
@@ -252,10 +226,10 @@ export default function AddInventoryScreen() {
               <TouchableOpacity
                 activeOpacity={0.7}
                 style={[styles.fracButton, { borderColor: colors.primary }]}
-                onPress={() => setFractionItemId(item.id)}
+                onPress={() => setQuantitySheetItemId(item.id)}
               >
                 <RNText style={[styles.fracGlyph, { color: colors.primary }]}>
-                  ½
+                  ⋯
                 </RNText>
               </TouchableOpacity>
             </View>
@@ -270,7 +244,7 @@ export default function AddInventoryScreen() {
       onHandByItemId,
       qtyByItemId,
       colors,
-      setFractionItemId,
+      setQuantitySheetItemId,
     ],
   );
 
@@ -407,19 +381,24 @@ export default function AddInventoryScreen() {
         </View>
       </View>
 
-      <FractionPickerSheet
-        open={fractionItemId !== null}
-        itemName={items.find((it) => it.id === fractionItemId)?.name}
+      <ItemQuantitySheet
+        open={quantitySheetItemId !== null}
+        item={items.find((it) => it.id === quantitySheetItemId) ?? null}
         currentQty={
-          fractionItemId !== null ? (qtyByItemId[fractionItemId] ?? 0) : 0
+          quantitySheetItemId !== null
+            ? (qtyByItemId[quantitySheetItemId] ?? 0)
+            : 0
         }
-        onSelect={(decimal) => {
-          if (fractionItemId !== null) {
-            const whole = Math.floor(qtyByItemId[fractionItemId] ?? 0);
-            setQty(fractionItemId, whole + decimal);
+        amountPrice={null}
+        qtyUnitLabel={
+          items.find((it) => it.id === quantitySheetItemId)?.packUom
+        }
+        onApply={(qty) => {
+          if (quantitySheetItemId !== null) {
+            setQty(quantitySheetItemId, qty);
           }
         }}
-        onDismiss={() => setFractionItemId(null)}
+        onDismiss={() => setQuantitySheetItemId(null)}
       />
     </>
   );

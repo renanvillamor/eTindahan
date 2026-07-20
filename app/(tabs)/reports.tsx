@@ -7,6 +7,14 @@ import { TouchableRipple } from "react-native-paper";
 
 const TILES = [
   {
+    id: "financial-standing",
+    label: "Financial Standing",
+    icon: "finance",
+    iconColor: "#4338CA",
+    iconBg: "#E0E7FF",
+    description: "Inventory, payables & unremitted sales",
+  },
+  {
     id: "daily-summary",
     label: "Daily Summary",
     icon: "cash-register",
@@ -31,8 +39,8 @@ const TILES = [
     description: "Stock on a selected date",
   },
   {
-    id: "daily-sales",
-    label: "Daily Sales",
+    id: "daily-sales-per-item",
+    label: "Daily Sales Per Item",
     icon: "chart-bar",
     iconColor: "#53B175",
     iconBg: "#DCFCE7",
@@ -47,8 +55,8 @@ const TILES = [
     description: "Deliveries per day",
   },
   {
-    id: "profit-report",
-    label: "Profit Report",
+    id: "item-profit-report",
+    label: "Item Profit Report",
     icon: "trending-up",
     iconColor: "#8B5CF6",
     iconBg: "#EDE9FE",
@@ -107,10 +115,14 @@ export default function ReportsScreen() {
                       router.push(
                         "/components/reports/inventory-snapshot" as any,
                       );
-                    } else if (tile.id === "daily-sales") {
-                      router.push("/components/reports/daily-sales");
-                    } else if (tile.id === "profit-report") {
-                      router.push("/components/reports/profit-report" as any);
+                    } else if (tile.id === "daily-sales-per-item") {
+                      router.push(
+                        "/components/reports/daily-sales-per-item" as any,
+                      );
+                    } else if (tile.id === "item-profit-report") {
+                      router.push(
+                        "/components/reports/item-profit-report" as any,
+                      );
                     } else if (tile.id === "daily-deliveries") {
                       router.push(
                         "/components/reports/daily-deliveries" as any,
@@ -125,6 +137,10 @@ export default function ReportsScreen() {
                       );
                     } else if (tile.id === "low-inventory") {
                       router.push("/components/reports/low-inventory" as any);
+                    } else if (tile.id === "financial-standing") {
+                      router.push(
+                        "/components/reports/financial-standing" as any,
+                      );
                     } else if (tile.id === "daily-summary") {
                       router.push("/components/reports/daily-summary" as any);
                     } else {

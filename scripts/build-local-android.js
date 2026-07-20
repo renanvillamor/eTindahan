@@ -10,11 +10,22 @@ function commandName(base) {
 }
 
 function run(command, args, cwd) {
+  // On Windows, spawning a .cmd/.bat directly with shell:false throws
+  // EINVAL — it needs to go through a shell to be resolved/executed.
+  const needsShell =
+    process.platform === "win32" && /\.(cmd|bat)$/i.test(command);
+
   const result = spawnSync(command, args, {
     cwd,
     stdio: "inherit",
-    shell: false,
+    shell: needsShell,
   });
+
+  if (result.error) {
+    console.error(`Failed to run "${command} ${args.join(" ")}":`);
+    console.error(result.error.message);
+    process.exit(1);
+  }
 
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
@@ -245,8 +256,10 @@ function prepare() {
 prepare();
 
 if (!prepareOnly) {
+  // On Windows, cmd.exe (used under shell:true) won't resolve a bare
+  // "gradlew.bat" against cwd — it needs the explicit ".\" prefix.
   run(
-    process.platform === "win32" ? "gradlew.bat" : "./gradlew",
+    process.platform === "win32" ? ".\\gradlew.bat" : "./gradlew",
     ["assembleRelease"],
     path.join(root, "android"),
   );
