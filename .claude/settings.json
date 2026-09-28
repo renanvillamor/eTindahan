@@ -25,5 +25,18 @@
       "Bash(npx prettier *)",
       "Bash(git rm *)"
     ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/kb-context.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }

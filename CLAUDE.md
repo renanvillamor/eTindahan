@@ -31,6 +31,26 @@ relationship, a known issue gets fixed or a new one is found), update
 `docs/APP_NOTES.md` in the same change — don't let it drift into being
 wrong. A stale source of truth is worse than no source of truth.
 
+### How the knowledge base is surfaced
+
+A `UserPromptSubmit` hook (`.claude/hooks/kb-context.js`, registered in
+`.claude/settings.json`) injects a `<knowledge-base>` block into context on
+**every prompt**: the current section index of `docs/APP_NOTES.md` with line
+numbers, generated from its headings at run time. Use it like this:
+
+- **Before analyzing or answering** (not only before editing), check the
+  index for sections relevant to the question and `Read` them using the line
+  number as the offset. Answers about how the app behaves — how a report is
+  computed, what a field means, why a number looks off — should be grounded
+  in the knowledge base, then verified against the code.
+- **If the doc and the code disagree**, say so explicitly. Either the code has
+  a bug or the doc is stale; don't silently pick one. Record the outcome in
+  the doc (fix the doc, or log the bug under "Known issues").
+- **Adding knowledge:** put new business rules/processes under an existing
+  `##` section, or add a new `##`/`###` heading so it shows up in the
+  injected index. Headings are the index — make them descriptive. Prefer
+  stating the rule, the files that implement it, and *why* it is that way.
+
 ## Coding style rules
 
 Non-negotiable, repo-wide. Keep changes minimal and scoped to existing
