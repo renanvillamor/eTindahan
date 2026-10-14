@@ -1,12 +1,22 @@
+import {
+  checkForAppUpdate,
+  getCurrentAppVersion,
+  UpdateCheckResult,
+} from "@/lib/appUpdate";
 import { useSnackbar } from "@/lib/SnackbarContext";
 import useSafePush from "@/lib/useSafePush";
 import { syncPendingDeletions } from "@/services/useDeleteSale";
 import { InvalidUnsyncedSalesError, useSaveSale } from "@/services/useSaveSale";
 import { useStore } from "@/store/useStore";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
-// import * as Updates from "expo-updates";
 import { useMemo, useState } from "react";
-import { Text as RNText, ScrollView, StyleSheet, View } from "react-native";
+import {
+  Linking,
+  Text as RNText,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import {
   ActivityIndicator,
   Button,
@@ -176,39 +186,41 @@ export default function SettingsScreen() {
   };
 
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [availableUpdate, setAvailableUpdate] =
+    useState<UpdateCheckResult | null>(null);
+  const currentAppVersion = getCurrentAppVersion();
 
-  // const handleCheckUpdate = async () => {
-  //   if (!Updates.isEnabled) {
-  //     showSnackbar("Updates not available in this build.", "info");
-  //     return;
-  //   }
-  //   setIsCheckingUpdate(true);
-  //   try {
-  //     const result = await Updates.checkForUpdateAsync();
-  //     if (result.isAvailable) {
-  //       Alert.alert(
-  //         "Update Available",
-  //         "A new version is ready. Restart now to apply it?",
-  //         [
-  //           { text: "Later", style: "cancel" },
-  //           {
-  //             text: "Restart Now",
-  //             onPress: async () => {
-  //               await Updates.fetchUpdateAsync();
-  //               await Updates.reloadAsync();
-  //             },
-  //           },
-  //         ],
-  //       );
-  //     } else {
-  //       showSnackbar("App is up to date.", "success");
-  //     }
-  //   } catch {
-  //     showSnackbar("Failed to check for updates.", "error");
-  //   } finally {
-  //     setIsCheckingUpdate(false);
-  //   }
-  // };
+  const handleCheckUpdate = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      const result = await checkForAppUpdate();
+      if (result.isUpdateAvailable) {
+        setAvailableUpdate(result);
+      } else {
+        showSnackbar(
+          `You're on the latest version (v${currentAppVersion}).`,
+          "success",
+        );
+      }
+    } catch (e: any) {
+      showSnackbar(e?.message ?? "Failed to check for updates.", "error");
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  // Opens the APK download in the browser; Android then offers to install
+  // it over the current app (same signing key required).
+  const handleDownloadUpdate = async () => {
+    if (!availableUpdate) return;
+    const url = availableUpdate.latest.apkUrl ?? availableUpdate.latest.pageUrl;
+    setAvailableUpdate(null);
+    try {
+      await Linking.openURL(url);
+    } catch {
+      showSnackbar("Couldn't open the download link.", "error");
+    }
+  };
 
   return (
     <>
@@ -333,18 +345,18 @@ export default function SettingsScreen() {
           />
         </View>
 
-        {/* <View className="flex-row gap-3">
+        <View className="flex-row gap-3">
           <SettingsTile
             icon="cellphone-arrow-down"
-            label="App Update"
-            subtitle="Check and install latest version"
+            label="Update Version"
+            subtitle={`v${currentAppVersion} · Check for the latest release`}
             accentColor="#009688"
             onPress={handleCheckUpdate}
             loading={isCheckingUpdate}
             disabled={isCheckingUpdate}
           />
           <View className="flex-1" />
-        </View> */}
+        </View>
       </ScrollView>
 
       <Portal>
@@ -366,6 +378,33 @@ export default function SettingsScreen() {
           <Dialog.Actions>
             <Button onPress={() => setInvalidCleanupState(null)}>Cancel</Button>
             <Button onPress={handleInvalidSalesCleanup}>Remove</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        <Dialog
+          visible={availableUpdate !== null}
+          onDismiss={() => setAvailableUpdate(null)}
+        >
+          <Dialog.Title>Update Available</Dialog.Title>
+          <Dialog.Content>
+            <RNText className="text-sm text-gray-700 leading-5">
+              Version v{availableUpdate?.latest.version} is available. You have
+              v{availableUpdate?.currentVersion}.
+            </RNText>
+            {availableUpdate?.latest.notes ? (
+              <ScrollView className="max-h-60 mt-3">
+                <RNText className="text-xs text-gray-500 leading-5">
+                  {availableUpdate.latest.notes}
+                </RNText>
+              </ScrollView>
+            ) : null}
+            <RNText className="text-xs text-gray-400 leading-4 mt-3">
+              Sync any offline sales before installing.
+            </RNText>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setAvailableUpdate(null)}>Later</Button>
+            <Button onPress={handleDownloadUpdate}>Download</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>

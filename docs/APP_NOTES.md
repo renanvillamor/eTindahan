@@ -538,6 +538,20 @@ cycle. Three parts:
   - Switching from the old debug-signed APKs to this key requires a
     **one-time uninstall/reinstall** on each device — sync offline data
     first.
+- **In-app update check:** Settings → "Update Version" (`lib/appUpdate.ts`)
+  calls the GitHub API `releases/latest` for `renanvillamor/eTindahan`
+  (unauthenticated — **the repo must stay public** or this 404s), compares
+  the tag (`vX.Y.Z`, leading `v` optional) against the installed
+  `Constants.expoConfig.version` (= `app.json` `expo.version` at build
+  time), and if newer offers to open the `eTindahan.apk` asset's download
+  URL (falls back to the release page if that asset is missing). So every
+  release must: bump `app.json` `expo.version`, tag `v<that version>`, and
+  attach the APK named exactly `eTindahan.apk`. Unauthenticated GitHub API
+  is rate-limited to 60 requests/hour per IP.
+  - **Gap:** the build script does *not* sync versions into the generated
+    (gitignored) `android/app/build.gradle` — `versionName`/`versionCode`
+    there must be bumped by hand (or `android/` regenerated) for each
+    release, or the APK's Android-level version stays `1.0.0`/`1`.
 - **Native dependencies** (e.g. `expo-clipboard`) need a new APK; they
   can't ship as a JS-only update.
 - **DB migrations:** run any new `scripts/*.sql` against Supabase before
