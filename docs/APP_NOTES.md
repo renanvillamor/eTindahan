@@ -515,3 +515,30 @@ cycle. Three parts:
   Supabase queries with `.range()` in `PAGE_SIZE = 1000` chunks — PostgREST
   caps unpaginated selects at 1000 rows, so a naive single `select()` would
   silently drop older/newer rows once a table crosses that size.
+
+## Release process (Android APK)
+
+- **Build:** `npm run android:apk` (`scripts/build-local-android.js`). It
+  prebuilds `android/` if missing (gitignored, generated), patches the
+  generated Gradle/CMake files, runs `assembleRelease`, then renames
+  `android/app/build/outputs/apk/release/app-release.apk` →
+  `eTindahan.apk` — the file name GitHub Releases are published with.
+- **Signing:** release builds are signed with a **private** key, not the
+  public React Native debug key (which anyone can sign with). The script
+  patches a `release` signingConfig into `android/app/build.gradle` that
+  reads `ETINDAHAN_RELEASE_STORE_FILE` / `_KEY_ALIAS` / `_STORE_PASSWORD` /
+  `_KEY_PASSWORD` from the *user-level* `~/.gradle/gradle.properties`
+  (never committed). If they're missing, the script refuses to build
+  rather than fall back to the debug key.
+  - Keystore lives at `~/.etindahan/release.keystore` (alias
+    `etindahan-release`, created 2026-10-15). **Back up the keystore and
+    the four properties together** — if lost, future APKs can't install
+    over existing installs (every device would have to uninstall, losing
+    unsynced offline data).
+  - Switching from the old debug-signed APKs to this key requires a
+    **one-time uninstall/reinstall** on each device — sync offline data
+    first.
+- **Native dependencies** (e.g. `expo-clipboard`) need a new APK; they
+  can't ship as a JS-only update.
+- **DB migrations:** run any new `scripts/*.sql` against Supabase before
+  distributing an APK that depends on them.

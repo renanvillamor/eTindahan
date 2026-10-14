@@ -93,6 +93,20 @@ function prepare() {
       ],
     },
     {
+      // Sign release builds with the private eTindahan key, read from
+      // ~/.gradle/gradle.properties (never committed). Without those
+      // properties the release config is left empty, so Gradle produces an
+      // *unsigned* APK instead of silently falling back to the public debug
+      // key — and checkReleaseSigning() below refuses to build before that.
+      relPath: "android/app/build.gradle",
+      replacements: [
+        {
+          from: `            keyPassword 'android'\n        }\n    }\n    buildTypes {\n        debug {\n            signingConfig signingConfigs.debug\n        }\n        release {\n            // Caution! In production, you need to generate your own keystore file.\n            // see https://reactnative.dev/docs/signed-apk-android.\n            signingConfig signingConfigs.debug\n`,
+          to: `            keyPassword 'android'\n        }\n        release {\n            if (findProperty('ETINDAHAN_RELEASE_STORE_FILE')) {\n                storeFile file(findProperty('ETINDAHAN_RELEASE_STORE_FILE'))\n                storePassword findProperty('ETINDAHAN_RELEASE_STORE_PASSWORD')\n                keyAlias findProperty('ETINDAHAN_RELEASE_KEY_ALIAS')\n                keyPassword findProperty('ETINDAHAN_RELEASE_KEY_PASSWORD')\n            }\n        }\n    }\n    buildTypes {\n        debug {\n            signingConfig signingConfigs.debug\n        }\n        release {\n            signingConfig signingConfigs.release\n`,
+        },
+      ],
+    },
+    {
       relPath: "android/gradle.properties",
       replacements: [
         {
@@ -253,9 +267,49 @@ function prepare() {
   );
 }
 
+function readGradleUserProperties() {
+  const gradleHome =
+    process.env.GRADLE_USER_HOME ||
+    path.join(require("os").homedir(), ".gradle");
+  const file = path.join(gradleHome, "gradle.properties");
+  if (!fs.existsSync(file)) return {};
+  const props = {};
+  for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
+    const m = /^\s*([^#=\s]+)\s*=\s*(.*)$/.exec(line);
+    if (m) props[m[1]] = m[2].trim();
+  }
+  return props;
+}
+
+function checkReleaseSigning() {
+  const props = readGradleUserProperties();
+  const required = [
+    "ETINDAHAN_RELEASE_STORE_FILE",
+    "ETINDAHAN_RELEASE_KEY_ALIAS",
+    "ETINDAHAN_RELEASE_STORE_PASSWORD",
+    "ETINDAHAN_RELEASE_KEY_PASSWORD",
+  ];
+  const missing = required.filter((k) => !props[k]);
+  if (missing.length > 0) {
+    console.error(
+      "Release signing is not configured on this machine. Missing in " +
+        `~/.gradle/gradle.properties: ${missing.join(", ")}.\n` +
+        "See 'Release process' in docs/APP_NOTES.md.",
+    );
+    process.exit(1);
+  }
+  if (!fs.existsSync(props.ETINDAHAN_RELEASE_STORE_FILE)) {
+    console.error(
+      `Release keystore not found: ${props.ETINDAHAN_RELEASE_STORE_FILE}`,
+    );
+    process.exit(1);
+  }
+}
+
 prepare();
 
 if (!prepareOnly) {
+  checkReleaseSigning();
   // On Windows, cmd.exe (used under shell:true) won't resolve a bare
   // "gradlew.bat" against cwd — it needs the explicit ".\" prefix.
   run(
