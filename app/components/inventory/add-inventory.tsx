@@ -7,11 +7,12 @@ import { Item } from "@/models/Item";
 import { Supplier } from "@/models/Supplier";
 import { useGetDeliveries } from "@/services/useGetDeliveries";
 import { useGetInventories } from "@/services/useGetInventories";
+import { useGetInventoryToday } from "@/services/useGetInventoryToday";
 import { useGetSalesToday } from "@/services/useGetSalesToday";
 import { useSaveInventory } from "@/services/useSaveInventory";
 import { format } from "date-fns";
 import { router, Stack } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Text as RNText,
   TextInput as RNTextInput,
@@ -91,9 +92,35 @@ export default function AddInventoryScreen() {
   const { isLoading: isLoadingInventories } = useGetInventories();
   const { isLoading: isLoadingSales } = useGetSalesToday();
   const { isLoading: isLoadingDeliveries } = useGetDeliveries();
+  // Today's already-recorded counts (if any) — lets this screen double as
+  // a correction flow: reopening it same-day prefills what was already
+  // counted instead of showing blank inputs.
+  const { data: todayData, isLoading: isLoadingToday } =
+    useGetInventoryToday();
 
   const isLoading =
-    isLoadingInventories || isLoadingSales || isLoadingDeliveries;
+    isLoadingInventories ||
+    isLoadingSales ||
+    isLoadingDeliveries ||
+    isLoadingToday;
+
+  // Prefill qtyByItemId from today's already-saved counts exactly once per
+  // screen visit, so later refetches (e.g. after Save invalidates the
+  // query) never clobber values the user is actively editing.
+  const prefilledRef = useRef(false);
+  useEffect(() => {
+    if (prefilledRef.current || !todayData) return;
+    prefilledRef.current = true;
+    const entries = Object.entries(todayData);
+    if (entries.length === 0) return;
+    setQtyByItemId((prev) => {
+      const next = { ...prev };
+      for (const [itemId, entry] of entries) {
+        if (!(Number(itemId) in next)) next[Number(itemId)] = entry.actualQty;
+      }
+      return next;
+    });
+  }, [todayData]);
 
   // Build reverse map: itemId → supplierId[]
   const itemSupplierMap = useMemo(() => {
@@ -118,9 +145,18 @@ export default function AddInventoryScreen() {
     return map;
   }, [items, activityByItemId]);
 
+  // "Dirty" means worth saving: a brand-new count for an item not yet
+  // recorded today, or a value that differs from what's already recorded
+  // today. Without the second check, prefilled-but-untouched items (see
+  // above) would re-insert a redundant, unchanged row on every Save.
   const dirtyEntries = useMemo(() => {
-    return items.filter((it) => it.id in qtyByItemId);
-  }, [items, qtyByItemId]);
+    return items.filter((it) => {
+      if (!(it.id in qtyByItemId)) return false;
+      const recordedToday = todayData?.[it.id]?.actualQty;
+      if (recordedToday === undefined) return true;
+      return qtyByItemId[it.id] !== recordedToday;
+    });
+  }, [items, qtyByItemId, todayData]);
 
   const getQty = useCallback(
     (itemId: number) => qtyByItemId[itemId] ?? 0,
@@ -178,6 +214,7 @@ export default function AddInventoryScreen() {
       const qty = getQty(item.id);
       const hasInput = item.id in qtyByItemId;
       const onHand = onHandByItemId[item.id];
+      const recordedToday = todayData?.[item.id];
       const rowBg = !hasInput
         ? undefined
         : qty === onHand
@@ -189,15 +226,31 @@ export default function AddInventoryScreen() {
           titleNumberOfLines={1}
           style={[styles.listItem, { backgroundColor: rowBg }]}
           description={() => (
-            <RNText className="text-sm text-gray-400">
-              ON-HAND: &nbsp;&nbsp;&nbsp;
-              {onHand !== undefined && (
-                <RNText className="text-sm text-gray-400">
-                  {Number.isInteger(onHand) ? `${onHand}` : onHand.toFixed(2)}
+            <View>
+              <RNText className="text-sm text-gray-400">
+                ON-HAND: &nbsp;&nbsp;&nbsp;
+                {onHand !== undefined && (
+                  <RNText className="text-sm text-gray-400">
+                    {Number.isInteger(onHand)
+                      ? `${onHand}`
+                      : onHand.toFixed(2)}
+                    {item.packUom ? ` ${item.packUom}/s` : ""}
+                  </RNText>
+                )}
+              </RNText>
+              {recordedToday && (
+                <RNText
+                  className="text-xs font-semibold"
+                  style={{ color: colors.primary }}
+                >
+                  Counted today:{" "}
+                  {Number.isInteger(recordedToday.actualQty)
+                    ? recordedToday.actualQty
+                    : recordedToday.actualQty.toFixed(2)}
                   {item.packUom ? ` ${item.packUom}/s` : ""}
                 </RNText>
               )}
-            </RNText>
+            </View>
           )}
           right={() => (
             <View style={styles.qtyRow}>
@@ -243,6 +296,7 @@ export default function AddInventoryScreen() {
       handleTextChange,
       onHandByItemId,
       qtyByItemId,
+      todayData,
       colors,
       setQuantitySheetItemId,
     ],

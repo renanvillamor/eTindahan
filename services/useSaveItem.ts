@@ -23,6 +23,7 @@ async function saveItem({ item, supplierIds }: SaveItemInput): Promise<Item> {
     is_active: item.isActive,
     min_threshold: item.minThreshold ?? null,
     max_threshold: item.maxThreshold ?? null,
+    stock_quantity: item.stockQuantity ?? null,
     ...(isNew ? { user_id: user.id } : {}),
   };
 

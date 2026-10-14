@@ -78,6 +78,9 @@ function PayableRow({
   const { colors } = useAppTheme();
   const isPaid = !!item.paidDate;
   const isOverdue = isPayableOverdue(item);
+  const amountPaid = item.amountPaid ?? 0;
+  const balance = Math.max(0, (item.amount ?? 0) - amountPaid);
+  const isPartiallyPaid = !isPaid && amountPaid > 0.001;
 
   return (
     <TouchableOpacity activeOpacity={0.8} onPress={() => onPress(item)}>
@@ -113,6 +116,18 @@ function PayableRow({
               {isOverdue ? " (overdue)" : ""}
             </Text>
           </View>
+
+          {isPartiallyPaid ? (
+            <View className="flex-row items-center gap-1">
+              <Text className="text-xs text-gray-400 w-20">Balance:</Text>
+              <Text
+                className="text-xs font-semibold"
+                style={{ color: colors.primary }}
+              >
+                {formatCurrency(balance)} of {formatCurrency(item.amount)}
+              </Text>
+            </View>
+          ) : null}
 
           {item.payeeName ? (
             <View className="flex-row items-center gap-1">
@@ -248,7 +263,10 @@ export default function PayablesScreen() {
     () =>
       filtered
         .filter((p) => !p.paidDate)
-        .reduce((sum, p) => sum + (p.amount ?? 0), 0),
+        .reduce(
+          (sum, p) => sum + Math.max(0, (p.amount ?? 0) - (p.amountPaid ?? 0)),
+          0,
+        ),
     [filtered],
   );
 
@@ -296,12 +314,10 @@ export default function PayablesScreen() {
     paymentMethods: PaymentMethodInput[],
     cashExpenses: CashExpenseInput[],
   ) => {
-    const shouldShowPaidItem = !isAddMode && !!payable.paidDate;
-
     saveMutation.mutate(
-      { payable },
+      { payable, paymentMethods },
       {
-        onSuccess: async () => {
+        onSuccess: async (saved) => {
           // Save cash expenses via useSaveExpense
           for (const e of cashExpenses) {
             await saveExpenseMutation.mutateAsync({
@@ -314,13 +330,15 @@ export default function PayablesScreen() {
             });
           }
           await syncPayables();
-          if (shouldShowPaidItem) {
+          if (!isAddMode && !!saved.paidDate) {
             setShowUnpaidOnly(false);
           }
           showSnackbar(
             isAddMode
               ? "Payable added successfully."
-              : "Payable updated successfully.",
+              : !isAddMode && !!saved.paidDate
+                ? "Payable settled successfully."
+                : "Payment recorded successfully.",
             "success",
           );
           setEditingItem(null);

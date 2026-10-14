@@ -97,9 +97,19 @@ export default function FinancialStandingReport() {
     () => unremittedDays.reduce((sum, d) => sum + d.netSales, 0),
     [unremittedDays],
   );
+  const totalUnremittedOpex = useMemo(
+    () => unremittedDays.reduce((sum, d) => sum + d.totalOpex, 0),
+    [unremittedDays],
+  );
+
+  const remittedFunds = data?.remittedFunds;
+  const totalRemittedFunds = remittedFunds?.total ?? 0;
 
   const overallNet =
-    totalInventoryValue + totalUnremittedNetSales - totalPayables;
+    totalInventoryValue +
+    totalUnremittedNetSales +
+    totalRemittedFunds -
+    totalPayables;
   const isPositive = overallNet >= 0;
 
   return (
@@ -275,12 +285,71 @@ export default function FinancialStandingReport() {
                 ))
               )}
 
+              {totalUnremittedOpex > 0 && (
+                <View className="flex-row items-center justify-between px-4 pb-1">
+                  <Text className="text-xs text-gray-400">
+                    Includes operating expenses
+                  </Text>
+                  <Text className="text-xs text-gray-500 font-medium">
+                    {formatCurrency(totalUnremittedOpex)}
+                  </Text>
+                </View>
+              )}
+
               <View style={[styles.totalRow, { backgroundColor: "#DBEAFE" }]}>
                 <Text style={[styles.totalLabel, { color: "#1D4ED8" }]}>
                   TOTAL UNREMITTED NET SALES
                 </Text>
                 <Text style={[styles.totalValue, { color: "#1D4ED8" }]}>
                   {formatCurrency(totalUnremittedNetSales)}
+                </Text>
+              </View>
+            </View>
+
+            {/* ── REMITTED FUNDS ── */}
+            <View style={styles.card}>
+              <View style={[styles.cardHeader, { backgroundColor: "#DCFCE7" }]}>
+                <Icon source="bank-outline" size={16} color="#15803D" />
+                <Text style={[styles.cardHeaderText, { color: "#15803D" }]}>
+                  REMITTED FUNDS
+                </Text>
+              </View>
+
+              {[
+                {
+                  key: "remitted",
+                  label: "Remitted net sales",
+                  value: remittedFunds?.remittedNetSales ?? 0,
+                },
+                {
+                  key: "delivery",
+                  label: "Less: non-cash delivery payments",
+                  value: -(remittedFunds?.nonCashDeliveryPayments ?? 0),
+                },
+                {
+                  key: "payable",
+                  label: "Less: non-cash payable payments",
+                  value: -(remittedFunds?.nonCashPayablePayments ?? 0),
+                },
+              ].map((row) => (
+                <View className="py-1" key={row.key}>
+                  <View className="flex-row items-center justify-between px-4 py-1">
+                    <Text className="text-gray-700 text-sm flex-1 mr-4">
+                      {row.label}
+                    </Text>
+                    <Text className="text-gray-800 text-sm font-semibold">
+                      {formatCurrency(row.value)}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+
+              <View style={[styles.totalRow, { backgroundColor: "#DCFCE7" }]}>
+                <Text style={[styles.totalLabel, { color: "#15803D" }]}>
+                  TOTAL REMITTED FUNDS
+                </Text>
+                <Text style={[styles.totalValue, { color: "#15803D" }]}>
+                  {formatCurrency(totalRemittedFunds)}
                 </Text>
               </View>
             </View>

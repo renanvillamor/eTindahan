@@ -1,10 +1,14 @@
 import ConfirmDialog from "@/app/components/shared/ConfirmDialog";
+import NotificationsBottomSheet from "@/app/components/shared/NotificationsBottomSheet";
 import SaleDetailSheet from "@/app/components/shared/SaleDetailSheet";
 import { CARD_COLORS } from "@/constants/Constants";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { useDueRecurringExpenses } from "@/hooks/useDueRecurringExpenses";
 import { useSnackbar } from "@/lib/SnackbarContext";
 import useSafePush from "@/lib/useSafePush";
+import { advanceDueDate } from "@/lib/recurringExpense";
 import { formatCurrency } from "@/lib/utils";
+import { RecurringExpense } from "@/models/RecurringExpense";
 import { SaleToday } from "@/models/SaleToday";
 import {
   syncPendingDeletions,
@@ -13,6 +17,7 @@ import {
 } from "@/services/useDeleteSale";
 import { useGetExpensesToday } from "@/services/useGetExpensesToday";
 import { useGetSalesToday } from "@/services/useGetSalesToday";
+import { useSaveRecurringExpense } from "@/services/useSaveRecurringExpense";
 import { useStore } from "@/store/useStore";
 import { format } from "date-fns";
 import { memo, useCallback, useMemo, useState } from "react";
@@ -23,7 +28,15 @@ import {
   StyleSheet,
   View,
 } from "react-native";
-import { Card, Divider, FAB, List, Text } from "react-native-paper";
+import {
+  Badge,
+  Card,
+  Divider,
+  FAB,
+  IconButton,
+  List,
+  Text,
+} from "react-native-paper";
 
 const SaleTodayRow = memo(function SaleTodayRow({
   item,
@@ -189,6 +202,36 @@ export default function DashboardScreen() {
   const removeSalesByIds = useStore((s) => s.removeSalesByIds);
   const { showSnackbar } = useSnackbar();
 
+  const dueRecurringExpenses = useDueRecurringExpenses();
+  const saveRecurringExpenseMutation = useSaveRecurringExpense();
+  const [skipTarget, setSkipTarget] = useState<RecurringExpense | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+
+  const handleLogRecurring = useCallback(
+    (template: RecurringExpense) => {
+      setNotificationsOpen(false);
+      safePush(
+        `/components/expenses/expenses?logRecurringId=${template.id}` as any,
+      );
+    },
+    [safePush],
+  );
+
+  const handleSkipConfirm = useCallback(() => {
+    if (!skipTarget) return;
+    const target = skipTarget;
+    setSkipTarget(null);
+    saveRecurringExpenseMutation.mutate(
+      {
+        ...target,
+        nextDueDate: advanceDueDate(target.nextDueDate, target.frequency),
+      },
+      {
+        onError: (error) => showSnackbar(error.message, "error"),
+      },
+    );
+  }, [skipTarget, saveRecurringExpenseMutation, showSnackbar]);
+
   const handleRowPress = useCallback((item: SaleToday) => {
     setSelectedSale(item);
   }, []);
@@ -248,9 +291,25 @@ export default function DashboardScreen() {
     <View className="flex-1 bg-white">
       {/* Static header */}
       <View className="pt-12">
-        <RNText className="text-4xl font-bold text-gray-800 text-center mt-4">
-          RGM Trading
-        </RNText>
+        <View className="flex-row items-center px-4 mt-4">
+          <View className="w-10" />
+          <RNText className="flex-1 text-4xl font-bold text-gray-800 text-center">
+            RGM Trading
+          </RNText>
+          <View className="w-10 items-end">
+            <IconButton
+              icon="bell-outline"
+              size={24}
+              onPress={() => setNotificationsOpen(true)}
+              style={notificationButtonStyle}
+            />
+            {dueRecurringExpenses.length > 0 && (
+              <Badge style={notificationBadgeStyle} size={16}>
+                {dueRecurringExpenses.length}
+              </Badge>
+            )}
+          </View>
+        </View>
 
         {/* Grand total */}
         <View className="p-4 items-center">
@@ -338,12 +397,30 @@ export default function DashboardScreen() {
         onDismiss={() => setDeleteTarget(null)}
       />
 
+      <ConfirmDialog
+        visible={skipTarget !== null}
+        title="Skip This Cycle"
+        message={`Skip this occurrence of "${skipTarget?.expenseCategoryName ?? "this recurring expense"}"? No expense will be logged, and it'll move to the next due date.`}
+        confirmLabel="Skip"
+        isLoading={saveRecurringExpenseMutation.isPending}
+        onConfirm={handleSkipConfirm}
+        onDismiss={() => setSkipTarget(null)}
+      />
+
       <SaleDetailSheet
         open={selectedSale !== null}
         sale={selectedSale}
         onDelete={handleDeleteFromSheet}
         onUndo={handleUndoFromSheet}
         onDismiss={() => setSelectedSale(null)}
+      />
+
+      <NotificationsBottomSheet
+        open={notificationsOpen}
+        dueRecurringExpenses={dueRecurringExpenses}
+        onLog={handleLogRecurring}
+        onSkip={(template) => setSkipTarget(template)}
+        onDismiss={() => setNotificationsOpen(false)}
       />
 
       <FAB.Group
@@ -399,6 +476,13 @@ const useFabStyles = (colors: ReturnType<typeof useAppTheme>["colors"]) =>
       backgroundColor: colors.primary,
     },
   });
+
+const notificationButtonStyle = { margin: 0 };
+const notificationBadgeStyle = {
+  position: "absolute" as const,
+  top: 4,
+  right: 4,
+};
 
 const styles = StyleSheet.create({
   typeCard: {

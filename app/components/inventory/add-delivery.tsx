@@ -16,7 +16,6 @@ import {
 import { Chip, IconButton, List, Searchbar } from "react-native-paper";
 import {
   CashExpenseInput,
-  PayableInput,
   PaymentMethodInput,
   useSaveDelivery,
 } from "../../../services/useSaveDelivery";
@@ -65,7 +64,6 @@ export default function AddDeliveryScreen() {
       reference: string | null,
       paymentMethods: PaymentMethodInput[],
       cashExpenses: CashExpenseInput[],
-      payables: PayableInput[],
     ) => {
       const deliveryItems = selectedItems.map((item) => ({
         item_id: item.id,
@@ -83,7 +81,6 @@ export default function AddDeliveryScreen() {
           reference,
           paymentMethods,
           cashExpenses,
-          payables,
         },
         {
           onSuccess: () => {

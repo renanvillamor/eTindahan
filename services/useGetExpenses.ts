@@ -5,7 +5,7 @@ export async function fetchExpenses(): Promise<Expense[]> {
   const { data, error } = await supabase
     .from("expense")
     .select(
-      "*, supplier:payee_id(id, name), sourceType:source_type(id, description)",
+      "*, supplier:payee_id(id, name), sourceType:source_type(id, description), category:expense_category_id(id, name, is_opex)",
     )
     .order("created_at", { ascending: false });
 
@@ -18,6 +18,12 @@ export async function fetchExpenses(): Promise<Expense[]> {
     sourceDate: row.source_date,
     sourceTypeId: row.source_type != null ? Number(row.source_type) : null,
     sourceTypeDescription: row.sourceType?.description ?? null,
+    expenseCategoryId:
+      row.expense_category_id != null ? Number(row.expense_category_id) : null,
+    expenseCategoryName: row.category?.name ?? null,
+    isOpex: row.category?.is_opex === true,
+    coverageStartDate: row.coverage_start_date ?? null,
+    coverageEndDate: row.coverage_end_date ?? null,
     amount: Number(row.amount ?? 0),
     remarks: row.remarks,
     payeeName: row.supplier?.name ?? null,

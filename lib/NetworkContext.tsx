@@ -93,6 +93,8 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ["suppliers"] });
         queryClient.invalidateQueries({ queryKey: ["deliveries"] });
         queryClient.invalidateQueries({ queryKey: ["inventories"] });
+        queryClient.invalidateQueries({ queryKey: ["expenseCategories"] });
+        queryClient.invalidateQueries({ queryKey: ["recurringExpenses"] });
       } else if (!connected && wasConnected.current) {
         wasConnected.current = false;
       }

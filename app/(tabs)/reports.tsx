@@ -71,6 +71,14 @@ const TILES = [
     description: "Daily sales & profit per type",
   },
   {
+    id: "profit-and-loss",
+    label: "Profit & Loss",
+    icon: "finance",
+    iconColor: "#C2410C",
+    iconBg: "#FFEDD5",
+    description: "Gross profit vs opex, any range",
+  },
+  {
     id: "inventory-variance",
     label: "Inventory Variance",
     icon: "scale-balance",
@@ -130,6 +138,10 @@ export default function ReportsScreen() {
                     } else if (tile.id === "sales-profit-report") {
                       router.push(
                         "/components/reports/sales-profit-report" as any,
+                      );
+                    } else if (tile.id === "profit-and-loss") {
+                      router.push(
+                        "/components/reports/profit-and-loss" as any,
                       );
                     } else if (tile.id === "inventory-variance") {
                       router.push(

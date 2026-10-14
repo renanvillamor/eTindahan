@@ -3,6 +3,7 @@ import SearchFilterBar, {
 } from "@/app/components/shared/SearchFilterBar";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { useInventoryActivity } from "@/hooks/useInventoryActivity";
+import { useSnackbar } from "@/lib/SnackbarContext";
 import { Inventory } from "@/models/Inventory";
 import { Supplier } from "@/models/Supplier";
 import { useGetDeliveries } from "@/services/useGetDeliveries";
@@ -10,9 +11,25 @@ import { useGetInventories } from "@/services/useGetInventories";
 import { useGetSalesToday } from "@/services/useGetSalesToday";
 import { useStore } from "@/store/useStore";
 import { router, Stack } from "expo-router";
-import { useMemo } from "react";
-import { RefreshControl, SectionList, StyleSheet, View } from "react-native";
-import { Divider, Icon, IconButton, List, Text } from "react-native-paper";
+import * as Clipboard from "expo-clipboard";
+import { useMemo, useRef, useState } from "react";
+import {
+  RefreshControl,
+  ScrollView,
+  SectionList,
+  StyleSheet,
+  View,
+} from "react-native";
+import {
+  Button,
+  Dialog,
+  Divider,
+  Icon,
+  IconButton,
+  List,
+  Portal,
+  Text,
+} from "react-native-paper";
 
 const SORT_OPTIONS: SortOption[] = [
   { key: "name", label: "Name" },
@@ -24,6 +41,7 @@ type LowInvRow = {
   inventory: Inventory;
   onHand: number;
   minThreshold: number;
+  orderQty: number | null;
 };
 
 function buildSupplierSections(
@@ -77,8 +95,42 @@ function fmtQty(qty: number): string {
   return Number.isInteger(qty) ? `${qty}` : qty.toFixed(2);
 }
 
+// Suppliers only deliver whole packs, so round up (1.5 → 2, 0.25 → 1). The
+// small epsilon keeps float noise (e.g. 2.0000000001) from bumping an exact
+// whole number up by one.
+function roundUpOrderQty(qty: number): number {
+  return Math.ceil(qty - 1e-9);
+}
+
+// Shortfalls under half a pack aren't worth ordering yet.
+const MIN_EXPORT_ORDER_QTY = 0.5;
+
+// Rows with no computable Order Qty (no stockQuantity set) or an unrounded
+// Order Qty under MIN_EXPORT_ORDER_QTY are excluded — nothing worth telling a
+// supplier to order for them. Exported quantities are rounded up.
+function buildExportText(rows: LowInvRow[]): string {
+  return rows
+    .filter(
+      (row) => row.orderQty != null && row.orderQty >= MIN_EXPORT_ORDER_QTY,
+    )
+    .map(
+      (row) =>
+        `${row.inventory.name} - ${fmtQty(roundUpOrderQty(row.orderQty!))}`,
+    )
+    .join("\n");
+}
+
 export default function LowInventoryReport() {
   const { colors } = useAppTheme();
+  const { showSnackbar } = useSnackbar();
+
+  const [exportVisible, setExportVisible] = useState(false);
+  const [exportText, setExportText] = useState("");
+  // Populated during SearchFilterBar's render-prop each render, so the
+  // header Export button (outside that scope) can read the currently
+  // displayed (filtered + sorted) rows without lifting SearchFilterBar's
+  // internal query/filter state up to this component.
+  const displayedRowsRef = useRef<LowInvRow[]>([]);
 
   const inventories = useStore((s) => s.inventories);
   const items = useStore((s) => s.items);
@@ -102,6 +154,15 @@ export default function LowInventoryReport() {
     return map;
   }, [items]);
 
+  // itemId → stockQuantity (target par level, from items store)
+  const stockQuantityByItemId = useMemo(() => {
+    const map: Record<number, number | null> = {};
+    for (const item of items) {
+      map[item.id] = item.stockQuantity;
+    }
+    return map;
+  }, [items]);
+
   // Build reverse map: itemId → supplierId[]
   const itemSupplierMap = useMemo(() => {
     const map: Record<number, number[]> = {};
@@ -119,18 +180,26 @@ export default function LowInventoryReport() {
     const rows: LowInvRow[] = [];
     for (const inv of inventories) {
       const minThreshold = minThresholdByItemId[inv.itemId];
-      if (minThreshold == null) continue;
+      // 0/unset both mean "no threshold configured" — don't flag every
+      // out-of-stock item as low just because minThreshold defaults to 0.
+      if (minThreshold == null || minThreshold <= 0) continue;
       const onHand = activityByItemId[inv.itemId]?.onHand ?? inv.actualQty ?? 0;
       if (onHand <= minThreshold) {
+        const stockQuantity = stockQuantityByItemId[inv.itemId];
+        // Unrounded shortfall, displayed as-is; only the export rounds it
+        // up (roundUpOrderQty) and drops sub-half-pack shortfalls.
+        const orderQty =
+          stockQuantity != null ? Math.max(stockQuantity - onHand, 0) : null;
         rows.push({
           inventory: inv,
           onHand,
           minThreshold,
+          orderQty,
         });
       }
     }
     return rows;
-  }, [inventories, minThresholdByItemId, activityByItemId]);
+  }, [inventories, minThresholdByItemId, stockQuantityByItemId, activityByItemId]);
 
   return (
     <>
@@ -151,7 +220,17 @@ export default function LowInventoryReport() {
             </View>
           ),
           headerRight: () => (
-            <View className="w-12 h-12 items-center justify-center -mr-2">
+            <View className="flex-row items-center -mr-2">
+              <IconButton
+                icon="export-variant"
+                size={22}
+                onPress={() => {
+                  setExportText(buildExportText(displayedRowsRef.current));
+                  setExportVisible(true);
+                }}
+                accessibilityLabel="Export"
+                className="m-0"
+              />
               <IconButton
                 icon="refresh"
                 size={22}
@@ -215,6 +294,8 @@ export default function LowInventoryReport() {
               );
             }
 
+            displayedRowsRef.current = filtered;
+
             const sections = buildSupplierSections(
               filtered,
               (row) => row.inventory.itemId,
@@ -256,8 +337,11 @@ export default function LowInventoryReport() {
                   <Text className="flex-1 text-xs font-semibold text-gray-400 uppercase">
                     {""}
                   </Text>
-                  <Text className="w-28 pl-2 pr-4 text-xs font-semibold text-gray-400 text-left uppercase">
+                  <Text className="w-24 pl-2 text-xs font-semibold text-gray-400 text-left uppercase">
                     Qty On Hand
+                  </Text>
+                  <Text className="w-24 pl-2 pr-4 text-xs font-semibold text-gray-400 text-left uppercase">
+                    Order Qty
                   </Text>
                 </View>
 
@@ -286,23 +370,36 @@ export default function LowInventoryReport() {
                         titleNumberOfLines={1}
                         style={styles.listItem}
                         right={() => (
-                          <View className="w-28 pl-2 pr-4">
-                            <Text
-                              numberOfLines={1}
-                              adjustsFontSizeToFit
-                              style={[
-                                styles.qtyValue,
-                                { color: isOut ? "#dc2626" : "#ea580c" },
-                              ]}
-                            >
-                              {fmtQty(row.onHand)}
-                              {row.inventory.uom ? (
-                                <Text style={styles.uomInline}>
-                                  {" "}
-                                  {row.inventory.uom}/s
-                                </Text>
-                              ) : null}
-                            </Text>
+                          <View className="flex-row">
+                            <View className="w-24 pl-2">
+                              <Text
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                style={[
+                                  styles.qtyValue,
+                                  { color: isOut ? "#dc2626" : "#ea580c" },
+                                ]}
+                              >
+                                {fmtQty(row.onHand)}
+                                {row.inventory.uom ? (
+                                  <Text style={styles.uomInline}>
+                                    {" "}
+                                    {row.inventory.uom}/s
+                                  </Text>
+                                ) : null}
+                              </Text>
+                            </View>
+                            <View className="w-24 pl-2 pr-4">
+                              <Text
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                style={styles.qtyValue}
+                              >
+                                {row.orderQty != null
+                                  ? fmtQty(row.orderQty)
+                                  : "—"}
+                              </Text>
+                            </View>
                           </View>
                         )}
                       />
@@ -314,6 +411,42 @@ export default function LowInventoryReport() {
           }}
         </SearchFilterBar>
       </View>
+
+      <Portal>
+        <Dialog
+          visible={exportVisible}
+          onDismiss={() => setExportVisible(false)}
+        >
+          <Dialog.Title>Export Low Inventory</Dialog.Title>
+          <Dialog.Content>
+            {exportText ? (
+              <ScrollView style={styles.exportScroll}>
+                <Text selectable style={styles.exportText}>
+                  {exportText}
+                </Text>
+              </ScrollView>
+            ) : (
+              <Text className="text-gray-400">
+                No items with a Stock Quantity set to export.
+              </Text>
+            )}
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setExportVisible(false)}>Close</Button>
+            <Button
+              mode="contained"
+              disabled={!exportText}
+              onPress={async () => {
+                await Clipboard.setStringAsync(exportText);
+                setExportVisible(false);
+                showSnackbar("Copied to clipboard.", "success");
+              }}
+            >
+              Copy
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </>
   );
 }
@@ -336,5 +469,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "400",
     color: "#9ca3af",
+  },
+  exportScroll: {
+    maxHeight: 320,
+  },
+  exportText: {
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

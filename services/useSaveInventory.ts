@@ -47,6 +47,7 @@ export function useSaveInventory() {
     mutationFn: saveInventory,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["inventories"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-today"] });
     },
   });
 }

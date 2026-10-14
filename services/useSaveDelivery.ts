@@ -24,13 +24,6 @@ export type PaymentMethodInput = {
   remarks: string | null;
 };
 
-export type PayableInput = {
-  payeeId: number | null;
-  reference: string | null;
-  amount: number;
-  remarks: string | null;
-};
-
 type SaveDeliveryParams = {
   supplierId: number | null;
   items: DeliveryItem[];
@@ -39,7 +32,6 @@ type SaveDeliveryParams = {
   reference: string | null;
   paymentMethods?: PaymentMethodInput[];
   cashExpenses?: CashExpenseInput[];
-  payables?: PayableInput[];
 };
 
 async function saveDelivery(params: SaveDeliveryParams): Promise<void> {
@@ -51,7 +43,6 @@ async function saveDelivery(params: SaveDeliveryParams): Promise<void> {
     reference,
     paymentMethods = [],
     cashExpenses = [],
-    payables = [],
   } = params;
 
   if (!items || items.length === 0) {
@@ -142,23 +133,6 @@ async function saveDelivery(params: SaveDeliveryParams): Promise<void> {
       })),
     );
     if (expenseError) throw new Error(expenseError.message);
-  }
-
-  // 6. Create payables for bank-transfer payments where "Add to Payable" was toggled on
-  const validBankPayables = payables.filter((p) => p.amount > 0);
-  if (validBankPayables.length > 0) {
-    const { error: bankPayableError } = await supabase.from("payable").insert(
-      validBankPayables.map((p) => ({
-        payee_id: p.payeeId ?? null,
-        reference: p.reference ?? null,
-        amount: p.amount,
-        due_date: null,
-        remarks: p.remarks ?? null,
-        paid_date: null,
-        user_id: user.id,
-      })),
-    );
-    if (bankPayableError) throw new Error(bankPayableError.message);
   }
 }
 

@@ -1,7 +1,9 @@
 import { NetworkProvider } from "@/lib/NetworkContext";
 import { SnackbarProvider } from "@/lib/SnackbarContext";
+import { useGetExpenseCategories } from "@/services/useGetExpenseCategories";
 import { useGetItemTypes } from "@/services/useGetItemTypes";
 import { useGetPaymentModes } from "@/services/useGetPaymentModes";
+import { useGetRecurringExpenses } from "@/services/useGetRecurringExpenses";
 import { useGetUom } from "@/services/useGetUom";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
@@ -118,6 +120,8 @@ function RootLayoutNav() {
   useGetSuppliers();
   useGetSupplierItems();
   useGetPaymentModes();
+  useGetExpenseCategories();
+  useGetRecurringExpenses();
 
   const appTheme = useAppTheme();
 

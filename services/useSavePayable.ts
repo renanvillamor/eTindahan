@@ -1,4 +1,5 @@
 import { Payable } from "@/models/Payable";
+import { PaymentMethodInput } from "@/services/useSaveDelivery";
 import { useMutation } from "@tanstack/react-query";
 import { format, isValid, parseISO } from "date-fns";
 import { supabase } from "../lib/supabaseClient";
@@ -29,9 +30,13 @@ function getTodayDateString(): string {
 
 type SavePayableInput = {
   payable: Payable;
+  paymentMethods?: PaymentMethodInput[];
 };
 
-async function savePayable({ payable }: SavePayableInput): Promise<Payable> {
+async function savePayable({
+  payable,
+  paymentMethods = [],
+}: SavePayableInput): Promise<Payable> {
   const isNew = payable.id === 0;
   const normalizedPaidDate = normalizeDateValue(payable.paidDate);
 
@@ -60,9 +65,45 @@ async function savePayable({ payable }: SavePayableInput): Promise<Payable> {
     if (error) throw new Error(error.message);
     return { ...payable, id: Number(data.id) };
   } else {
-    // Update: only paid_date and remarks are allowed to change
+    // Record this round's payment entries as their own payable_payment rows
+    // — amount_paid is the running sum of these, so partial payments can
+    // accumulate across multiple visits before the payable is fully settled.
+    const validPayments = paymentMethods.filter((p) => p.amount > 0);
+    if (validPayments.length > 0) {
+      const { error: paymentError } = await supabase
+        .from("payable_payment")
+        .insert(
+          validPayments.map((p) => ({
+            payable_id: payable.id,
+            payment_mode_id: p.paymentModeId ?? null,
+            amount: p.amount,
+            source_date: p.sourceDate ?? null,
+            source_type: p.sourceTypeId ?? null,
+            remarks: p.remarks ?? null,
+            user_id: user.id,
+          })),
+        );
+      if (paymentError) throw new Error(paymentError.message);
+    }
+
+    const { data: paymentRows, error: sumError } = await supabase
+      .from("payable_payment")
+      .select("amount")
+      .eq("payable_id", payable.id);
+    if (sumError) throw new Error(sumError.message);
+    const amountPaid = (paymentRows ?? []).reduce(
+      (sum, r: any) => sum + Number(r.amount ?? 0),
+      0,
+    );
+    // Only close out the payable once payments cover the full amount —
+    // otherwise it stays outstanding for the remaining balance.
+    const isFullyPaid = amountPaid >= payable.amount - 0.001;
+    const newPaidDate = isFullyPaid
+      ? (normalizedPaidDate ?? getTodayDateString())
+      : null;
+
     const payload = {
-      paid_date: normalizedPaidDate ?? getTodayDateString(),
+      paid_date: newPaidDate,
       remarks: payable.remarks ?? null,
       user_id: user.id,
     };
@@ -83,8 +124,9 @@ async function savePayable({ payable }: SavePayableInput): Promise<Payable> {
 
     return {
       ...payable,
-      paidDate: data.paid_date ?? payload.paid_date,
+      paidDate: data.paid_date ?? newPaidDate,
       remarks: data.remarks ?? payload.remarks,
+      amountPaid,
     };
   }
 }

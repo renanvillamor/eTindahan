@@ -16,4 +16,5 @@ export type Item = {
   singleUomId: number;
   minThreshold: number | null;
   maxThreshold: number | null;
+  stockQuantity: number | null;
 };

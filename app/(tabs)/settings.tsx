@@ -171,6 +171,8 @@ export default function SettingsScreen() {
     queryClient.invalidateQueries({ queryKey: ["deliveries"] });
     queryClient.invalidateQueries({ queryKey: ["inventories"] });
     queryClient.invalidateQueries({ queryKey: ["paymentModes"] });
+    queryClient.invalidateQueries({ queryKey: ["expenseCategories"] });
+    queryClient.invalidateQueries({ queryKey: ["recurringExpenses"] });
   };
 
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
@@ -257,6 +259,31 @@ export default function SettingsScreen() {
             accentColor="#009688"
             onPress={() =>
               safePush("/components/settings/payment-mode/payment-modes")
+            }
+          />
+          <SettingsTile
+            icon="clipboard-text-outline"
+            label="Expense Categories"
+            subtitle="Categorize cash-outs & opex"
+            accentColor="#795548"
+            onPress={() =>
+              safePush(
+                "/components/settings/expense-category/expense-categories",
+              )
+            }
+          />
+        </View>
+
+        <View className="flex-row gap-3">
+          <SettingsTile
+            icon="calendar-refresh-outline"
+            label="Recurring Expenses"
+            subtitle="Rent, salaries & other periodic opex"
+            accentColor="#8D6E63"
+            onPress={() =>
+              safePush(
+                "/components/settings/recurring-expense/recurring-expenses",
+              )
             }
           />
           <View className="flex-1" />

@@ -65,6 +65,7 @@ export default function ItemsScreen() {
       singleUomId: 0,
       minThreshold: null,
       maxThreshold: null,
+      stockQuantity: null,
     });
   };
 

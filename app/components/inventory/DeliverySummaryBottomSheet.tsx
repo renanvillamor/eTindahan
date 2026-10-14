@@ -1,7 +1,5 @@
 import PaymentMethodsSection, {
-  PayableConfig,
   getTodayString,
-  isBankTransferMode,
   isCashMode,
   newEntryId,
   usePaymentEntries,
@@ -12,7 +10,6 @@ import { ItemType } from "@/models/ItemType";
 import { PaymentMode } from "@/models/PaymentMode";
 import {
   CashExpenseInput,
-  PayableInput,
   PaymentMethodInput,
 } from "@/services/useSaveDelivery";
 import BottomSheet, {
@@ -54,7 +51,6 @@ type DeliverySummaryBottomSheetProps = {
     reference: string | null,
     paymentMethods: PaymentMethodInput[],
     cashExpenses: CashExpenseInput[],
-    payables: PayableInput[],
   ) => void;
   onDismiss?: () => void;
 };
@@ -90,9 +86,6 @@ export default function DeliverySummaryBottomSheet({
     resetEntries,
   } = usePaymentEntries();
   const [paymentExpanded, setPaymentExpanded] = useState(false);
-  const [payableConfigs, setPayableConfigs] = useState<
-    Record<string, PayableConfig>
-  >({});
 
   const selectedItems = useMemo(() => {
     return items.map((it) => {
@@ -116,7 +109,6 @@ export default function DeliverySummaryBottomSheet({
       setReference("");
       resetEntries([]);
       setPaymentExpanded(false);
-      setPayableConfigs({});
       sheetRef.current?.snapToIndex(0);
     } else {
       sheetRef.current?.close();
@@ -142,25 +134,6 @@ export default function DeliverySummaryBottomSheet({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPaid, open]);
-
-  // Sync bank-transfer payable configs whenever payment entries or modes change
-  useEffect(() => {
-    setPayableConfigs((prev) => {
-      const next: Record<string, PayableConfig> = {};
-      for (const entry of paymentEntries) {
-        const mode = paymentModes.find((m) => m.id === entry.paymentModeId);
-        if (mode && isBankTransferMode(mode.mode)) {
-          next[entry.entryId] = prev[entry.entryId] ?? {
-            addToPayable: false,
-            reference: "Personal",
-            amount: entry.amount,
-            remarks: `${supplierName ?? ""} - ${format(new Date(), "M/d/yyyy")}`,
-          };
-        }
-      }
-      return next;
-    });
-  }, [paymentEntries, paymentModes, supplierName]);
 
   const snapPoints = useMemo(
     () => (isPaid && paymentExpanded ? ["92%"] : ["75%"]),
@@ -242,14 +215,6 @@ export default function DeliverySummaryBottomSheet({
       reference || null,
       paymentMethods,
       cashExpenses,
-      Object.values(payableConfigs)
-        .filter((cfg) => cfg.addToPayable)
-        .map((cfg) => ({
-          payeeId: supplierId,
-          reference: cfg.reference.trim() || null,
-          amount: parseFloat(cfg.amount) || 0,
-          remarks: cfg.remarks.trim() || null,
-        })),
     );
   };
 
@@ -449,13 +414,6 @@ export default function DeliverySummaryBottomSheet({
                     onAdd={() => addEntry(remaining)}
                     onUpdate={updateEntry}
                     onRemove={removeEntry}
-                    payableConfigs={payableConfigs}
-                    onPayableConfigChange={(entryId, cfg) =>
-                      setPayableConfigs((prev) => ({
-                        ...prev,
-                        [entryId]: cfg,
-                      }))
-                    }
                   />
                 </View>
               )}

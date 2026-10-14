@@ -37,6 +37,7 @@ type FormValues = {
   singleUomName: string;
   minThreshold: string;
   maxThreshold: string;
+  stockQuantity: string;
 };
 
 export default function ItemDetailsBottomSheet({
@@ -91,6 +92,7 @@ export default function ItemDetailsBottomSheet({
       singleUomName: "",
       minThreshold: "",
       maxThreshold: "",
+      stockQuantity: "",
     },
   });
   const itemTypeOptions = useMemo<SelectOption[]>(
@@ -143,6 +145,8 @@ export default function ItemDetailsBottomSheet({
           item?.minThreshold != null ? String(item.minThreshold) : "",
         maxThreshold:
           item?.maxThreshold != null ? String(item.maxThreshold) : "",
+        stockQuantity:
+          item?.stockQuantity != null ? String(item.stockQuantity) : "",
       });
       // Validate immediately so isValid reflects the reset values
       trigger();
@@ -189,6 +193,8 @@ export default function ItemDetailsBottomSheet({
       singleUom: data.singleUomName,
       minThreshold: data.minThreshold !== "" ? Number(data.minThreshold) : null,
       maxThreshold: data.maxThreshold !== "" ? Number(data.maxThreshold) : null,
+      stockQuantity:
+        data.stockQuantity !== "" ? Number(data.stockQuantity) : null,
     };
     onSave(updatedItem, selectedSupplierIds);
   };
@@ -445,6 +451,33 @@ export default function ItemDetailsBottomSheet({
             </Chip>
           ))}
         </View>
+
+        {/* Stock Quantity — target on-hand level used to compute order qty */}
+        <Text style={styles.sectionLabel}>Stock Planning</Text>
+        <Controller
+          control={control}
+          name="stockQuantity"
+          rules={{
+            validate: (v) =>
+              v === "" || (!isNaN(Number(v)) && Number(v) >= 0) || "Invalid",
+          }}
+          render={({
+            field: { value, onChange, onBlur },
+            fieldState: { error },
+          }) => (
+            <TextInput
+              label="Stock Quantity"
+              value={value}
+              onChangeText={onChange}
+              onBlur={onBlur}
+              keyboardType="numeric"
+              mode="outlined"
+              error={!!error}
+              placeholder="Optional"
+              style={styles.input}
+            />
+          )}
+        />
 
         {/* Thresholds — 2 columns */}
         <Text style={styles.sectionLabel}>Stock Thresholds</Text>

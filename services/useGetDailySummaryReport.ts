@@ -12,7 +12,8 @@ export type DailySalesTypeRow = {
 export type DailyExpenseRow = {
   id: number;
   payeeName: string | null;
-  sourceTypeDescription: string | null;
+  categoryName: string | null;
+  isOpex: boolean;
   remarks: string | null;
   amount: number;
 };
@@ -21,7 +22,10 @@ export type DailySummaryData = {
   salesByType: DailySalesTypeRow[];
   expenses: DailyExpenseRow[];
   totalSales: number;
+  /** Sum of ALL expenses (opex + other) — what nets against sales below. */
   totalExpenses: number;
+  totalOpex: number;
+  totalOtherExpenses: number;
   netBalance: number;
 };
 
@@ -40,7 +44,7 @@ async function fetchDailySummary(date: string): Promise<DailySummaryData> {
     supabase
       .from("expense")
       .select(
-        "id, amount, remarks, supplier:payee_id(id, name), sourceType:source_type(id, description)",
+        "id, amount, remarks, supplier:payee_id(id, name), category:expense_category_id(id, name, is_opex)",
       )
       .eq("source_date", date)
       .order("created_at", { ascending: true }),
@@ -84,20 +88,29 @@ async function fetchDailySummary(date: string): Promise<DailySummaryData> {
     (row: any) => ({
       id: Number(row.id),
       payeeName: row.supplier?.name ?? null,
-      sourceTypeDescription: row.sourceType?.description ?? null,
+      categoryName: row.category?.name ?? null,
+      isOpex: row.category?.is_opex === true,
       remarks: row.remarks ?? null,
       amount: Number(row.amount ?? 0),
     }),
   );
 
   const totalSales = salesByType.reduce((s, r) => s + r.totalSales, 0);
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+  const totalOpex = expenses
+    .filter((e) => e.isOpex)
+    .reduce((s, e) => s + e.amount, 0);
+  const totalOtherExpenses = expenses
+    .filter((e) => !e.isOpex)
+    .reduce((s, e) => s + e.amount, 0);
+  const totalExpenses = totalOpex + totalOtherExpenses;
 
   return {
     salesByType,
     expenses,
     totalSales,
     totalExpenses,
+    totalOpex,
+    totalOtherExpenses,
     netBalance: totalSales - totalExpenses,
   };
 }

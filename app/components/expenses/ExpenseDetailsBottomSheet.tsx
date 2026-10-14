@@ -3,7 +3,7 @@ import OptionSelectSheet, {
 } from "@/app/components/shared/OptionSelectSheet";
 import { useAppTheme } from "@/hooks/useAppTheme";
 import { Expense } from "@/models/Expense";
-import { ItemType } from "@/models/ItemType";
+import { ExpenseCategory } from "@/models/ExpenseCategory";
 import { Supplier } from "@/models/Supplier";
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -13,15 +13,18 @@ import { format, isValid, parseISO } from "date-fns";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
-import { Button, Text, TextInput } from "react-native-paper";
+import { Button, Switch, Text, TextInput } from "react-native-paper";
 import { DatePickerModal } from "react-native-paper-dates";
 
 type FormValues = {
   payeeId: number | null;
   payeeName: string;
   sourceDate: string;
-  sourceTypeId: number | null;
-  sourceTypeDescription: string;
+  expenseCategoryId: number | null;
+  expenseCategoryName: string;
+  hasCoveragePeriod: boolean;
+  coverageStartDate: string;
+  coverageEndDate: string;
   amount: string;
   remarks: string;
 };
@@ -32,7 +35,7 @@ type ExpenseDetailsBottomSheetProps = {
   isAddMode: boolean;
   isLoading?: boolean;
   suppliers: Supplier[];
-  itemTypes: ItemType[];
+  expenseCategories: ExpenseCategory[];
   onSave: (expense: Expense) => void;
   onDismiss: () => void;
 };
@@ -67,7 +70,7 @@ export default function ExpenseDetailsBottomSheet({
   isAddMode,
   isLoading = false,
   suppliers,
-  itemTypes,
+  expenseCategories,
   onSave,
   onDismiss,
 }: ExpenseDetailsBottomSheetProps) {
@@ -75,6 +78,9 @@ export default function ExpenseDetailsBottomSheet({
   const styles = useStyles(colors);
   const sheetRef = useRef<BottomSheet>(null);
   const [sourceDatePickerOpen, setSourceDatePickerOpen] = useState(false);
+  const [coverageStartPickerOpen, setCoverageStartPickerOpen] =
+    useState(false);
+  const [coverageEndPickerOpen, setCoverageEndPickerOpen] = useState(false);
 
   const {
     control,
@@ -90,8 +96,11 @@ export default function ExpenseDetailsBottomSheet({
       payeeId: null,
       payeeName: "",
       sourceDate: "",
-      sourceTypeId: null,
-      sourceTypeDescription: "",
+      expenseCategoryId: null,
+      expenseCategoryName: "",
+      hasCoveragePeriod: false,
+      coverageStartDate: "",
+      coverageEndDate: "",
       amount: "",
       remarks: "",
     },
@@ -105,12 +114,20 @@ export default function ExpenseDetailsBottomSheet({
     [suppliers],
   );
 
-  const itemTypeOptions = useMemo<SelectOption[]>(
+  const categoryOptions = useMemo<SelectOption[]>(
     () => [
       { id: -1, label: "— None —" },
-      ...itemTypes.map((type) => ({ id: type.id, label: type.description })),
+      ...expenseCategories.map((c) => ({ id: c.id, label: c.name })),
     ],
-    [itemTypes],
+    [expenseCategories],
+  );
+
+  const selectedCategoryId = watch("expenseCategoryId");
+  const selectedCategoryIsOpex = useMemo(
+    () =>
+      expenseCategories.find((c) => c.id === selectedCategoryId)?.isOpex ??
+      false,
+    [expenseCategories, selectedCategoryId],
   );
 
   useEffect(() => {
@@ -119,6 +136,9 @@ export default function ExpenseDetailsBottomSheet({
         item?.payeeId != null
           ? (suppliers.find((s) => s.id === item.payeeId)?.name ?? "")
           : "";
+      const category = expenseCategories.find(
+        (c) => c.id === item?.expenseCategoryId,
+      );
 
       reset({
         payeeId: item?.payeeId ?? null,
@@ -126,15 +146,18 @@ export default function ExpenseDetailsBottomSheet({
         sourceDate:
           formatDateDisplay(item?.sourceDate) ||
           (isAddMode ? getTodayDateString() : ""),
-        sourceTypeId: item?.sourceTypeId ?? null,
-        sourceTypeDescription: item?.sourceTypeDescription ?? "",
+        expenseCategoryId: item?.expenseCategoryId ?? null,
+        expenseCategoryName: category?.name ?? item?.expenseCategoryName ?? "",
+        hasCoveragePeriod: !!(item?.coverageStartDate && item?.coverageEndDate),
+        coverageStartDate: formatDateDisplay(item?.coverageStartDate),
+        coverageEndDate: formatDateDisplay(item?.coverageEndDate),
         amount:
           item?.amount != null && item.amount > 0 ? String(item.amount) : "",
         remarks: item?.remarks ?? "",
       });
       trigger();
     }
-  }, [isAddMode, item, open, reset, suppliers, trigger]);
+  }, [isAddMode, item, open, reset, suppliers, expenseCategories, trigger]);
 
   useEffect(() => {
     if (open) {
@@ -160,14 +183,21 @@ export default function ExpenseDetailsBottomSheet({
 
   const onSubmit = (data: FormValues) => {
     const parsedAmount = parseFloat(data.amount.replace(/[^0-9.]/g, ""));
+    const useCoverage = data.hasCoveragePeriod && selectedCategoryIsOpex;
     onSave({
       id: item?.id ?? 0,
       createdAt: item?.createdAt ?? null,
       payeeId: data.payeeId,
       payeeName: data.payeeName || null,
       sourceDate: parseDateInput(data.sourceDate),
-      sourceTypeId: data.sourceTypeId,
-      sourceTypeDescription: data.sourceTypeDescription || null,
+      expenseCategoryId: data.expenseCategoryId,
+      expenseCategoryName: data.expenseCategoryName || null,
+      coverageStartDate: useCoverage
+        ? parseDateInput(data.coverageStartDate)
+        : null,
+      coverageEndDate: useCoverage
+        ? parseDateInput(data.coverageEndDate)
+        : null,
       amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
       remarks: data.remarks.trim() || null,
     });
@@ -266,29 +296,167 @@ export default function ExpenseDetailsBottomSheet({
         <View style={styles.field}>
           <Controller
             control={control}
-            name="sourceTypeId"
+            name="expenseCategoryId"
             render={({ field: { onChange } }) => (
               <OptionSelectSheet
-                label="Source Type"
-                value={watch("sourceTypeDescription")}
-                options={itemTypeOptions}
+                label="Category"
+                value={watch("expenseCategoryName")}
+                options={categoryOptions}
                 onSelect={(opt: SelectOption) => {
                   if (opt.id === -1) {
                     onChange(null);
-                    setValue("sourceTypeDescription", "", {
+                    setValue("expenseCategoryName", "", {
                       shouldValidate: true,
                     });
                   } else {
                     onChange(opt.id);
-                    setValue("sourceTypeDescription", opt.label, {
+                    setValue("expenseCategoryName", opt.label, {
                       shouldValidate: true,
                     });
+                  }
+                  // Coverage period only applies to opex categories — clear
+                  // it if the newly selected category isn't one.
+                  const nowOpex =
+                    expenseCategories.find((c) => c.id === opt.id)?.isOpex ??
+                    false;
+                  if (!nowOpex) {
+                    setValue("hasCoveragePeriod", false);
                   }
                 }}
               />
             )}
           />
         </View>
+
+        {/* Coverage period — opex categories only (e.g. a month's rent).
+            When set, the amount is amortized across these days in the
+            Profit & Loss report instead of hitting one day at full value. */}
+        {selectedCategoryIsOpex && (
+          <View style={styles.field}>
+            <Controller
+              control={control}
+              name="hasCoveragePeriod"
+              render={({ field: { value, onChange } }) => (
+                <View style={styles.toggleRow}>
+                  <Text variant="bodyMedium" style={styles.toggleLabel}>
+                    This covers a period (e.g. a month's rent)
+                  </Text>
+                  <Switch value={value} onValueChange={onChange} />
+                </View>
+              )}
+            />
+
+            {watch("hasCoveragePeriod") && (
+              <View style={styles.coverageRow}>
+                <View style={styles.coverageCol}>
+                  <Controller
+                    control={control}
+                    name="coverageStartDate"
+                    rules={{
+                      validate: (v) =>
+                        !watch("hasCoveragePeriod") ||
+                        v.trim().length > 0 ||
+                        "Required",
+                    }}
+                    render={({ field: { value } }) => (
+                      <TouchableOpacity
+                        onPress={() => setCoverageStartPickerOpen(true)}
+                        activeOpacity={0.7}
+                      >
+                        <TextInput
+                          label="Covers From"
+                          value={value || " "}
+                          mode="outlined"
+                          editable={false}
+                          pointerEvents="none"
+                          right={
+                            <TextInput.Icon
+                              icon="calendar"
+                              onPress={() => setCoverageStartPickerOpen(true)}
+                            />
+                          }
+                        />
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+                <View style={styles.coverageCol}>
+                  <Controller
+                    control={control}
+                    name="coverageEndDate"
+                    rules={{
+                      validate: (v) =>
+                        !watch("hasCoveragePeriod") ||
+                        v.trim().length > 0 ||
+                        "Required",
+                    }}
+                    render={({ field: { value } }) => (
+                      <TouchableOpacity
+                        onPress={() => setCoverageEndPickerOpen(true)}
+                        activeOpacity={0.7}
+                      >
+                        <TextInput
+                          label="Covers To"
+                          value={value || " "}
+                          mode="outlined"
+                          editable={false}
+                          pointerEvents="none"
+                          right={
+                            <TextInput.Icon
+                              icon="calendar"
+                              onPress={() => setCoverageEndPickerOpen(true)}
+                            />
+                          }
+                        />
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+              </View>
+            )}
+
+            <DatePickerModal
+              locale="en"
+              mode="single"
+              visible={coverageStartPickerOpen}
+              onDismiss={() => setCoverageStartPickerOpen(false)}
+              date={
+                watch("coverageStartDate")
+                  ? parseISO(watch("coverageStartDate"))
+                  : undefined
+              }
+              onConfirm={({ date }: { date: Date | undefined }) => {
+                setCoverageStartPickerOpen(false);
+                if (date && isValid(date)) {
+                  setValue("coverageStartDate", format(date, "yyyy-MM-dd"), {
+                    shouldValidate: true,
+                  });
+                }
+              }}
+              uppercase={false}
+            />
+            <DatePickerModal
+              locale="en"
+              mode="single"
+              visible={coverageEndPickerOpen}
+              onDismiss={() => setCoverageEndPickerOpen(false)}
+              date={
+                watch("coverageEndDate")
+                  ? parseISO(watch("coverageEndDate"))
+                  : undefined
+              }
+              onConfirm={({ date }: { date: Date | undefined }) => {
+                setCoverageEndPickerOpen(false);
+                if (date && isValid(date)) {
+                  setValue("coverageEndDate", format(date, "yyyy-MM-dd"), {
+                    shouldValidate: true,
+                  });
+                }
+              }}
+              uppercase={false}
+            />
+          </View>
+        )}
 
         {/* Amount */}
         <Controller
@@ -377,6 +545,25 @@ const useStyles = (colors: any) =>
     },
     field: {
       marginTop: 8,
+    },
+    toggleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 4,
+    },
+    toggleLabel: {
+      color: colors.onBackground,
+      flex: 1,
+      marginRight: 12,
+    },
+    coverageRow: {
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 8,
+    },
+    coverageCol: {
+      flex: 1,
     },
     footer: {
       marginTop: 24,

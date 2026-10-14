@@ -82,6 +82,7 @@ const InventoryRow = memo(function InventoryRow({
   return (
     <List.Item
       title={item.name}
+      description={item.uom ?? undefined}
       titleNumberOfLines={1}
       style={invRowStyle}
       right={() => (

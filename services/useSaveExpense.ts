@@ -26,7 +26,12 @@ async function saveExpense(expense: Expense): Promise<Expense> {
   const payload = {
     payee_id: expense.payeeId ?? null,
     source_date: normalizeDateValue(expense.sourceDate),
-    source_type: expense.sourceTypeId ?? null,
+    // source_type (item_type) is no longer written for new/edited expenses —
+    // expense_category_id replaces it. Old rows keep their source_type so
+    // history still displays correctly.
+    expense_category_id: expense.expenseCategoryId ?? null,
+    coverage_start_date: normalizeDateValue(expense.coverageStartDate),
+    coverage_end_date: normalizeDateValue(expense.coverageEndDate),
     amount: expense.amount,
     remarks: expense.remarks?.trim() || null,
     user_id: user.id,

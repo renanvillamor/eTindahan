@@ -107,6 +107,14 @@ export default function ItemProfitReport() {
                       >
                         SUPPLIER
                       </Text>
+                      <Text
+                        style={[
+                          styles.headerSubText,
+                          { color: colors.primary },
+                        ]}
+                      >
+                        /unit
+                      </Text>
                     </View>
                     <View style={styles.priceCol}>
                       <Text
@@ -114,12 +122,28 @@ export default function ItemProfitReport() {
                       >
                         RETAIL
                       </Text>
+                      <Text
+                        style={[
+                          styles.headerSubText,
+                          { color: colors.primary },
+                        ]}
+                      >
+                        /unit
+                      </Text>
                     </View>
                     <View style={styles.priceCol}>
                       <Text
                         style={[styles.headerText, { color: colors.primary }]}
                       >
                         PROFIT
+                      </Text>
+                      <Text
+                        style={[
+                          styles.headerSubText,
+                          { color: colors.primary },
+                        ]}
+                      >
+                        /unit
                       </Text>
                     </View>
                   </View>
@@ -144,6 +168,11 @@ export default function ItemProfitReport() {
                         <Text style={styles.priceValue}>
                           {formatCurrency(item.supplierUnitPrice)}
                         </Text>
+                        {item.packSize && item.packSize > 0 && (
+                          <Text style={styles.priceHint}>
+                            {formatCurrency(item.supplierPrice)}/pack
+                          </Text>
+                        )}
                       </View>
                       <View style={styles.priceCol}>
                         <Text style={styles.priceValue}>
@@ -181,6 +210,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     textAlign: "center",
+  },
+  headerSubText: {
+    fontSize: 9,
+    fontWeight: "500",
+    textAlign: "center",
+    opacity: 0.7,
   },
   nameCol: {
     flex: 1,

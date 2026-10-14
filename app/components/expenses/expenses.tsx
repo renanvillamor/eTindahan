@@ -1,18 +1,25 @@
 import ConfirmDialog from "@/app/components/shared/ConfirmDialog";
 import DateSelector from "@/app/components/shared/DateSelector";
 import { useAppTheme } from "@/hooks/useAppTheme";
+import { advanceDueDate, coveragePeriodFor } from "@/lib/recurringExpense";
 import { useSnackbar } from "@/lib/SnackbarContext";
 import { formatCurrency } from "@/lib/utils";
 import { Expense } from "@/models/Expense";
 import { useDeleteExpense } from "@/services/useDeleteExpense";
 import { fetchExpenses } from "@/services/useGetExpenses";
 import { useSaveExpense } from "@/services/useSaveExpense";
+import { useSaveRecurringExpense } from "@/services/useSaveRecurringExpense";
 import BottomSheet, {
   BottomSheetBackdrop,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { format, isValid, parseISO } from "date-fns";
-import { router, Stack, useFocusEffect } from "expo-router";
+import {
+  router,
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+} from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
@@ -79,7 +86,7 @@ function ExpenseGroupRow({
               <View className="flex-1">
                 <Text className="text-sm text-gray-700">
                   {formatDateLabel(item.sourceDate)} -{" "}
-                  {item.sourceTypeDescription ?? ""}
+                  {item.expenseCategoryName ?? item.sourceTypeDescription ?? ""}
                 </Text>
               </View>
               <View className="items-end">
@@ -110,9 +117,11 @@ export default function ExpensesScreen() {
   const { showSnackbar } = useSnackbar();
 
   const suppliers = useStore((s) => s.suppliers) ?? [];
-  const itemTypes = useStore((s) => s.itemTypes) ?? [];
+  const expenseCategories = useStore((s) => s.expenseCategories) ?? [];
+  const recurringExpenses = useStore((s) => s.recurringExpenses) ?? [];
   const saveMutation = useSaveExpense();
   const deleteMutation = useDeleteExpense();
+  const saveRecurringExpenseMutation = useSaveRecurringExpense();
 
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -121,7 +130,47 @@ export default function ExpensesScreen() {
   const [isAddMode, setIsAddMode] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
   const [actionTarget, setActionTarget] = useState<Expense | null>(null);
+  // Set while logging a due recurring-expense occurrence via handleAdd's
+  // prefilled path — tells handleSave's onSuccess which template to
+  // advance to its next due date once the expense itself is saved.
+  const [pendingRecurringId, setPendingRecurringId] = useState<number | null>(
+    null,
+  );
   const actionSheetRef = useRef<BottomSheet>(null);
+
+  // Arriving from the Dashboard's "Log" action on a due recurring expense
+  // (?logRecurringId=<id>) — prefill and open the same Add Expense sheet
+  // instead of building a separate form. Only triggers once per param
+  // value so re-renders don't keep re-opening the sheet.
+  const { logRecurringId } = useLocalSearchParams<{
+    logRecurringId?: string;
+  }>();
+  const handledLogRecurringId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!logRecurringId || handledLogRecurringId.current === logRecurringId) {
+      return;
+    }
+    const template = recurringExpenses.find(
+      (t) => t.id === Number(logRecurringId),
+    );
+    if (!template) return;
+
+    handledLogRecurringId.current = logRecurringId;
+    const coverage = coveragePeriodFor(template.nextDueDate, template.frequency);
+    setPendingRecurringId(template.id);
+    setIsAddMode(true);
+    setEditingItem({
+      id: 0,
+      amount: template.amount,
+      expenseCategoryId: template.expenseCategoryId,
+      expenseCategoryName: template.expenseCategoryName ?? null,
+      sourceDate: template.nextDueDate,
+      coverageStartDate: coverage.start,
+      coverageEndDate: coverage.end,
+      remarks: template.remarks,
+    });
+  }, [logRecurringId, recurringExpenses]);
 
   useEffect(() => {
     if (actionTarget) {
@@ -193,11 +242,13 @@ export default function ExpensesScreen() {
   }, [filtered]);
 
   const handleAdd = () => {
+    setPendingRecurringId(null);
     setIsAddMode(true);
     setEditingItem({ id: 0, amount: 0 });
   };
 
   const handleEdit = (item: Expense) => {
+    setPendingRecurringId(null);
     setIsAddMode(false);
     setEditingItem(item);
   };
@@ -205,11 +256,29 @@ export default function ExpensesScreen() {
   const handleDismiss = () => {
     setEditingItem(null);
     setIsAddMode(false);
+    setPendingRecurringId(null);
   };
 
   const handleSave = (expense: Expense) => {
     saveMutation.mutate(expense, {
       onSuccess: async () => {
+        // If this save logged a due recurring-expense occurrence, roll its
+        // template forward to the next cycle now that the expense itself
+        // is confirmed saved.
+        if (pendingRecurringId != null) {
+          const template = recurringExpenses.find(
+            (t) => t.id === pendingRecurringId,
+          );
+          if (template) {
+            saveRecurringExpenseMutation.mutate({
+              ...template,
+              nextDueDate: advanceDueDate(
+                template.nextDueDate,
+                template.frequency,
+              ),
+            });
+          }
+        }
         await syncExpenses();
         showSnackbar(
           isAddMode
@@ -219,6 +288,7 @@ export default function ExpensesScreen() {
         );
         setEditingItem(null);
         setIsAddMode(false);
+        setPendingRecurringId(null);
       },
       onError: (error) => {
         showSnackbar(error.message, "error");
@@ -363,7 +433,7 @@ export default function ExpensesScreen() {
         isAddMode={isAddMode}
         isLoading={saveMutation.isPending}
         suppliers={suppliers}
-        itemTypes={itemTypes}
+        expenseCategories={expenseCategories}
         onSave={handleSave}
         onDismiss={handleDismiss}
       />

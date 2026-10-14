@@ -7,13 +7,7 @@ import { PaymentMode } from "@/models/PaymentMode";
 import { format, isValid, parseISO } from "date-fns";
 import { useCallback, useMemo, useState } from "react";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
-import {
-  Button,
-  IconButton,
-  Switch,
-  Text,
-  TextInput,
-} from "react-native-paper";
+import { Button, IconButton, Text, TextInput } from "react-native-paper";
 import { DatePickerModal } from "react-native-paper-dates";
 
 // ── Shared types ───────────────────────────────────────────────────────────────
@@ -40,17 +34,6 @@ export function getTodayString(): string {
 export function newEntryId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 }
-
-export function isBankTransferMode(modeName: string): boolean {
-  return /bank.?transfer/i.test(modeName);
-}
-
-export type PayableConfig = {
-  addToPayable: boolean;
-  reference: string;
-  amount: string;
-  remarks: string;
-};
 
 // ── usePaymentEntries hook ─────────────────────────────────────────────────────
 
@@ -126,8 +109,6 @@ function PaymentEntryRow({
   onUpdate,
   onRemove,
   onOpenDatePicker,
-  payableConfig,
-  onPayableConfigChange,
 }: {
   entry: PaymentEntry;
   itemTypes: ItemType[];
@@ -135,15 +116,12 @@ function PaymentEntryRow({
   onUpdate: (updated: PaymentEntry) => void;
   onRemove: () => void;
   onOpenDatePicker: () => void;
-  payableConfig?: PayableConfig;
-  onPayableConfigChange?: (config: PayableConfig) => void;
 }) {
   const selectedMode = paymentModes.find((m) => m.id === entry.paymentModeId);
   const selectedSourceType = itemTypes.find(
     (type) => type.id === entry.sourceTypeId,
   );
   const isCash = selectedMode ? isCashMode(selectedMode.mode) : false;
-  const isBank = selectedMode ? isBankTransferMode(selectedMode.mode) : false;
 
   const modeOptions: SelectOption[] = paymentModes.map((pm) => ({
     id: pm.id,
@@ -240,63 +218,6 @@ function PaymentEntryRow({
           />
         </View>
       )}
-      {isBank && payableConfig && (
-        <View style={rowStyles.bankTransferFields}>
-          <View style={rowStyles.switchRow}>
-            <Text style={rowStyles.bankLabel}>Add to Payable</Text>
-            <Switch
-              value={payableConfig.addToPayable}
-              onValueChange={(v) =>
-                onPayableConfigChange?.({
-                  ...payableConfig,
-                  addToPayable: v,
-                })
-              }
-            />
-          </View>
-          {payableConfig.addToPayable && (
-            <View style={rowStyles.bankFields}>
-              <TextInput
-                label="Reference"
-                value={payableConfig.reference}
-                onChangeText={(v) =>
-                  onPayableConfigChange?.({
-                    ...payableConfig,
-                    reference: v,
-                  })
-                }
-                mode="outlined"
-                dense
-              />
-              <TextInput
-                label="Amount"
-                value={payableConfig.amount}
-                onChangeText={(v) =>
-                  onPayableConfigChange?.({
-                    ...payableConfig,
-                    amount: v.replace(/[^0-9.]/g, ""),
-                  })
-                }
-                mode="outlined"
-                keyboardType="numeric"
-                dense
-              />
-              <TextInput
-                label="Remarks"
-                value={payableConfig.remarks}
-                onChangeText={(v) =>
-                  onPayableConfigChange?.({
-                    ...payableConfig,
-                    remarks: v,
-                  })
-                }
-                mode="outlined"
-                dense
-              />
-            </View>
-          )}
-        </View>
-      )}
     </View>
   );
 }
@@ -326,25 +247,6 @@ const rowStyles = StyleSheet.create({
   remarksField: {
     marginTop: 2,
   },
-  bankTransferFields: {
-    marginTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    paddingTop: 8,
-    gap: 8,
-  },
-  switchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  bankLabel: {
-    color: "#374151",
-    fontSize: 14,
-  },
-  bankFields: {
-    gap: 8,
-  },
 });
 
 // ── PaymentMethodsSection ──────────────────────────────────────────────────────
@@ -357,8 +259,6 @@ type PaymentMethodsSectionProps = {
   onAdd: () => void;
   onUpdate: (entry: PaymentEntry) => void;
   onRemove: (entryId: string) => void;
-  payableConfigs?: Record<string, PayableConfig>;
-  onPayableConfigChange?: (entryId: string, config: PayableConfig) => void;
 };
 
 export default function PaymentMethodsSection({
@@ -369,8 +269,6 @@ export default function PaymentMethodsSection({
   onAdd,
   onUpdate,
   onRemove,
-  payableConfigs,
-  onPayableConfigChange,
 }: PaymentMethodsSectionProps) {
   const [datePickerEntryId, setDatePickerEntryId] = useState<string | null>(
     null,
@@ -388,10 +286,6 @@ export default function PaymentMethodsSection({
           onUpdate={onUpdate}
           onRemove={() => onRemove(entry.entryId)}
           onOpenDatePicker={() => setDatePickerEntryId(entry.entryId)}
-          payableConfig={payableConfigs?.[entry.entryId]}
-          onPayableConfigChange={(cfg) =>
-            onPayableConfigChange?.(entry.entryId, cfg)
-          }
         />
       ))}
       <Button

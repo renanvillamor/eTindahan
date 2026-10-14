@@ -1,8 +1,10 @@
 import { Delivery } from "@/models/Delivery";
+import { ExpenseCategory } from "@/models/ExpenseCategory";
 import { Inventory } from "@/models/Inventory";
 import { Item } from "@/models/Item";
 import { ItemType } from "@/models/ItemType";
 import { PaymentMode } from "@/models/PaymentMode";
+import { RecurringExpense } from "@/models/RecurringExpense";
 import { SaleToday } from "@/models/SaleToday";
 import { Supplier } from "@/models/Supplier";
 import { Uom } from "@/models/Uom";
@@ -19,6 +21,8 @@ type StoreState = {
   suppliers: Supplier[];
   uoms: Uom[];
   paymentModes: PaymentMode[];
+  expenseCategories: ExpenseCategory[];
+  recurringExpenses: RecurringExpense[];
   salesToday: SaleToday[];
   supplierItems: Record<number, number[]>;
   setItems: (items: Item[]) => void;
@@ -30,6 +34,12 @@ type StoreState = {
   setPaymentModes: (modes: PaymentMode[]) => void;
   updatePaymentMode: (mode: PaymentMode) => void;
   removePaymentMode: (id: number) => void;
+  setExpenseCategories: (categories: ExpenseCategory[]) => void;
+  updateExpenseCategory: (category: ExpenseCategory) => void;
+  removeExpenseCategory: (id: number) => void;
+  setRecurringExpenses: (templates: RecurringExpense[]) => void;
+  updateRecurringExpense: (template: RecurringExpense) => void;
+  removeRecurringExpense: (id: number) => void;
   setSalesToday: (dbSales: SaleToday[]) => void;
   addSalesToday: (sales: SaleToday[]) => void;
   removeSalesByIds: (saleIds: number[]) => void;
@@ -58,6 +68,8 @@ export const useStore = create<StoreState>()(
       suppliers: [],
       uoms: [],
       paymentModes: [],
+      expenseCategories: [],
+      recurringExpenses: [],
       salesToday: [],
       supplierItems: {},
       setItems: (items) => {
@@ -108,6 +120,54 @@ export const useStore = create<StoreState>()(
       removePaymentMode: (id) => {
         set((state) => {
           state.paymentModes = state.paymentModes.filter((m) => m.id !== id);
+        });
+      },
+      setExpenseCategories: (categories) => {
+        set((state) => {
+          state.expenseCategories = categories;
+        });
+      },
+      updateExpenseCategory: (category) => {
+        set((state) => {
+          const index = state.expenseCategories.findIndex(
+            (c) => c.id === category.id,
+          );
+          if (index !== -1) {
+            state.expenseCategories[index] = category;
+          } else {
+            state.expenseCategories.push(category);
+          }
+        });
+      },
+      removeExpenseCategory: (id) => {
+        set((state) => {
+          state.expenseCategories = state.expenseCategories.filter(
+            (c) => c.id !== id,
+          );
+        });
+      },
+      setRecurringExpenses: (templates) => {
+        set((state) => {
+          state.recurringExpenses = templates;
+        });
+      },
+      updateRecurringExpense: (template) => {
+        set((state) => {
+          const index = state.recurringExpenses.findIndex(
+            (t) => t.id === template.id,
+          );
+          if (index !== -1) {
+            state.recurringExpenses[index] = template;
+          } else {
+            state.recurringExpenses.push(template);
+          }
+        });
+      },
+      removeRecurringExpense: (id) => {
+        set((state) => {
+          state.recurringExpenses = state.recurringExpenses.filter(
+            (t) => t.id !== id,
+          );
         });
       },
       setSalesToday: (dbSales) => {

@@ -78,6 +78,16 @@ function getTodayDateString(): string {
   return format(new Date(), "yyyy-MM-dd");
 }
 
+function formatHistoryDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    const dt = parseISO(iso.slice(0, 10));
+    return isValid(dt) ? format(dt, "MMM d, yyyy") : "—";
+  } catch {
+    return "—";
+  }
+}
+
 export default function PayableDetailsBottomSheet({
   open,
   item,
@@ -156,7 +166,11 @@ export default function PayableDetailsBottomSheet({
         const defaultMode =
           paymentModes.find((m) => m.isDefault) ?? paymentModes[0] ?? null;
         const becomingCash = defaultMode ? isCashMode(defaultMode.mode) : false;
-        const amt = item?.amount != null ? String(item.amount) : "";
+        const outstanding = Math.max(
+          0,
+          (item?.amount ?? 0) - (item?.amountPaid ?? 0),
+        );
+        const amt = outstanding > 0 ? String(outstanding) : "";
         resetEntries([
           {
             entryId: `${Date.now()}-init`,
@@ -199,8 +213,12 @@ export default function PayableDetailsBottomSheet({
   );
 
   const payableTotal = item?.amount ?? 0;
-  const remaining = payableTotal - totalPaymentAmount;
-  const hasPaymentShortfall = !isAddMode && remaining > 0.001;
+  const alreadyPaid = item?.amountPaid ?? 0;
+  const outstandingBeforePayment = Math.max(0, payableTotal - alreadyPaid);
+  const remaining = outstandingBeforePayment - totalPaymentAmount;
+  const hasNoPaymentEntered = !isAddMode && totalPaymentAmount <= 0.001;
+  const hasOverpayment = !isAddMode && remaining < -0.001;
+  const paymentHistory = item?.payments ?? [];
 
   const handleUpdateEntry = useCallback(
     (updated: PaymentEntry) => {
@@ -233,7 +251,10 @@ export default function PayableDetailsBottomSheet({
       (entry) => ({
         paymentModeId: entry.paymentModeId,
         amount: parseFloat(entry.amount),
-        sourceDate: entry.sourceDate || null,
+        // Non-cash entries have no date input of their own — fall back to
+        // this round's Payment Date so every payable_payment row still gets
+        // a real date to be aggregated against in reports.
+        sourceDate: entry.sourceDate || paidDate,
         sourceTypeId: entry.sourceTypeId,
         remarks: entry.remarks.trim() || null,
       }),
@@ -288,7 +309,7 @@ export default function PayableDetailsBottomSheet({
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.title}>
-          {isAddMode ? "Add Payable" : "Settle Payable"}
+          {isAddMode ? "Add Payable" : "Record Payment"}
         </Text>
 
         {isAddMode ? (
@@ -423,7 +444,55 @@ export default function PayableDetailsBottomSheet({
           </>
         ) : (
           <>
-            {/* Paid Date */}
+            {/* Amount summary */}
+            <View style={styles.field}>
+              <View className="flex-row justify-between">
+                <Text className="text-sm text-gray-500">Total Amount</Text>
+                <Text
+                  className="text-sm font-semibold"
+                  style={{ color: colors.onSurface }}
+                >
+                  {formatCurrency(payableTotal)}
+                </Text>
+              </View>
+              {alreadyPaid > 0 && (
+                <View className="flex-row justify-between mt-1">
+                  <Text className="text-sm text-gray-500">Already Paid</Text>
+                  <Text className="text-sm font-semibold text-green-600">
+                    {formatCurrency(alreadyPaid)}
+                  </Text>
+                </View>
+              )}
+              <View className="flex-row justify-between mt-1">
+                <Text className="text-sm text-gray-500">Balance Due</Text>
+                <Text
+                  className="text-sm font-bold"
+                  style={{ color: colors.primary }}
+                >
+                  {formatCurrency(outstandingBeforePayment)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Payment History */}
+            {paymentHistory.length > 0 && (
+              <View style={styles.field}>
+                <Text style={styles.sectionLabel}>Payment History</Text>
+                {paymentHistory.map((p) => (
+                  <View key={p.id} className="flex-row justify-between py-1">
+                    <Text className="text-xs text-gray-500">
+                      {formatHistoryDate(p.sourceDate)} ·{" "}
+                      {p.paymentModeName ?? "—"}
+                    </Text>
+                    <Text className="text-xs font-medium text-gray-700">
+                      {formatCurrency(p.amount)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Payment Date */}
             <Controller
               control={control}
               name="paidDate"
@@ -435,7 +504,7 @@ export default function PayableDetailsBottomSheet({
                     style={styles.field}
                   >
                     <TextInput
-                      label="Paid Date"
+                      label="Payment Date"
                       value={value || " "}
                       mode="outlined"
                       editable={false}
@@ -505,14 +574,20 @@ export default function PayableDetailsBottomSheet({
           <Button
             mode="contained"
             onPress={handleSubmit(onSubmit)}
-            disabled={!formIsValid || hasPaymentShortfall || isLoading}
+            disabled={
+              !formIsValid || hasNoPaymentEntered || hasOverpayment || isLoading
+            }
             loading={isLoading}
           >
             {isAddMode
               ? "Add Payable"
-              : hasPaymentShortfall
-                ? `Remaining ${formatCurrency(remaining)}`
-                : "Settle Payable"}
+              : hasNoPaymentEntered
+                ? "Enter Payment Amount"
+                : hasOverpayment
+                  ? `Overpaid by ${formatCurrency(Math.abs(remaining))}`
+                  : remaining > 0.001
+                    ? `Record Payment (Balance ${formatCurrency(remaining)})`
+                    : "Settle Payable"}
           </Button>
           <Button
             mode="outlined"

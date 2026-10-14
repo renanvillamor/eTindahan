@@ -30,7 +30,10 @@ export default function DailySummaryReport() {
   const net = data?.netBalance ?? 0;
   const isPositive = net >= 0;
   const totalSales = data?.totalSales ?? 0;
-  const totalExpenses = data?.totalExpenses ?? 0;
+  const totalOpex = data?.totalOpex ?? 0;
+  const totalOtherExpenses = data?.totalOtherExpenses ?? 0;
+  const opexRows = data?.expenses.filter((e) => e.isOpex) ?? [];
+  const otherExpenseRows = data?.expenses.filter((e) => !e.isOpex) ?? [];
 
   return (
     <>
@@ -127,16 +130,16 @@ export default function DailySummaryReport() {
               </View>
             </View>
 
-            {/* ── EXPENSES ── */}
+            {/* ── OPERATING EXPENSES ── */}
             <View style={styles.card}>
               <View style={[styles.cardHeader, { backgroundColor: "#FFEDD5" }]}>
                 <Icon source="receipt-text-outline" size={16} color="#C2410C" />
                 <Text style={[styles.cardHeaderText, { color: "#C2410C" }]}>
-                  EXPENSES
+                  OPERATING EXPENSES
                 </Text>
               </View>
 
-              {(data?.expenses.length ?? 0) === 0 ? (
+              {opexRows.length === 0 ? (
                 <View className="flex-row items-center justify-center gap-2 py-8">
                   <Icon
                     source="receipt-text-outline"
@@ -144,15 +147,14 @@ export default function DailySummaryReport() {
                     color="#d1d5db"
                   />
                   <Text className="text-gray-400 text-sm">
-                    No expenses recorded
+                    No operating expenses recorded
                   </Text>
                 </View>
               ) : (
-                data!.expenses.map((row: DailyExpenseRow, idx) => {
+                opexRows.map((row: DailyExpenseRow) => {
                   const primary =
-                    [row.payeeName, row.sourceTypeDescription]
-                      .filter(Boolean)
-                      .join(" — ") || "—";
+                    [row.payeeName, row.categoryName].filter(Boolean).join(" — ") ||
+                    "—";
                   return (
                     <View className="py-1" key={row.id}>
                       <View className="flex-row items-start justify-between px-4 py-1 gap-3">
@@ -183,10 +185,69 @@ export default function DailySummaryReport() {
 
               <View style={[styles.totalRow, { backgroundColor: "#FFEDD5" }]}>
                 <Text style={[styles.totalLabel, { color: "#C2410C" }]}>
-                  TOTAL EXPENSES
+                  TOTAL OPERATING EXPENSES
                 </Text>
                 <Text style={[styles.totalValue, { color: "#C2410C" }]}>
-                  {formatCurrency(totalExpenses)}
+                  {formatCurrency(totalOpex)}
+                </Text>
+              </View>
+            </View>
+
+            {/* ── OTHER EXPENSES ── */}
+            <View style={styles.card}>
+              <View style={[styles.cardHeader, { backgroundColor: "#F3F4F6" }]}>
+                <Icon source="cash-minus" size={16} color="#4B5563" />
+                <Text style={[styles.cardHeaderText, { color: "#4B5563" }]}>
+                  OTHER EXPENSES
+                </Text>
+              </View>
+
+              {otherExpenseRows.length === 0 ? (
+                <View className="flex-row items-center justify-center gap-2 py-8">
+                  <Icon source="cash-minus" size={22} color="#d1d5db" />
+                  <Text className="text-gray-400 text-sm">
+                    No other expenses recorded
+                  </Text>
+                </View>
+              ) : (
+                otherExpenseRows.map((row: DailyExpenseRow) => {
+                  const primary =
+                    [row.payeeName, row.categoryName].filter(Boolean).join(" — ") ||
+                    "—";
+                  return (
+                    <View className="py-1" key={row.id}>
+                      <View className="flex-row items-start justify-between px-4 py-1 gap-3">
+                        <View className="flex-1">
+                          <Text
+                            className="text-gray-800 font-medium text-sm"
+                            numberOfLines={2}
+                          >
+                            {primary}
+                          </Text>
+                          {!!row.remarks && (
+                            <Text
+                              className="text-gray-400 text-xs mt-0.5"
+                              numberOfLines={2}
+                            >
+                              {row.remarks}
+                            </Text>
+                          )}
+                        </View>
+                        <Text className="text-gray-800 font-semibold text-sm mt-0.5">
+                          {formatCurrency(row.amount)}
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+
+              <View style={[styles.totalRow, { backgroundColor: "#F3F4F6" }]}>
+                <Text style={[styles.totalLabel, { color: "#4B5563" }]}>
+                  TOTAL OTHER EXPENSES
+                </Text>
+                <Text style={[styles.totalValue, { color: "#4B5563" }]}>
+                  {formatCurrency(totalOtherExpenses)}
                 </Text>
               </View>
             </View>

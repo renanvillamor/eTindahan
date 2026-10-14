@@ -23,7 +23,8 @@
       "Bash(node -e \"console.log\\(require\\('./node_modules/react-native/package.json'\\).version\\)\")",
       "Bash(git checkout *)",
       "Bash(npx prettier *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(npx eslint *)"
     ]
   },
   "hooks": {
