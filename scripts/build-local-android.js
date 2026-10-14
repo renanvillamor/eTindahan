@@ -263,4 +263,16 @@ if (!prepareOnly) {
     ["assembleRelease"],
     path.join(root, "android"),
   );
+
+  // Rename to the file name GitHub Releases are published with, so the
+  // build output can be uploaded as-is.
+  const releaseDir = path.join(root, "android/app/build/outputs/apk/release");
+  const builtApk = path.join(releaseDir, "app-release.apk");
+  const releaseApk = path.join(releaseDir, "eTindahan.apk");
+  if (!fs.existsSync(builtApk)) {
+    console.error(`Expected build output not found: ${builtApk}`);
+    process.exit(1);
+  }
+  fs.renameSync(builtApk, releaseApk);
+  console.log(`Release APK: ${path.relative(root, releaseApk)}`);
 }
